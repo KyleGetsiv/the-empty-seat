@@ -38,7 +38,8 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 
 - **Work module by module.** The dev plan is organized into phases (0 through 8), each with numbered modules (e.g., 0.1, 0.2, 0.3). Do one module at a time. After each module, summarize what was built, propose the next commit message, and wait for my approval before starting the next module.
 - **Do not chain modules.** Even if the next module looks simple, stop and check in.
-- **Commit per module.** Clean, descriptive commit messages. One module per commit when practical.
+- **Commit per module.** Clean, descriptive commit messages. One module per commit when practical. No em dashes in commit messages; use colons or commas.
+- **For auth, routing, and redirect modules: verify in a browser, not just build/lint.** Build and lint cannot catch redirect loops or auth flow bugs. Any module that touches middleware, layout-level auth checks, or login/callback routes must be tested end-to-end in a browser before proposing a commit. (Reference: module 0.6 had a redirect loop on /admin/login caused by the admin layout applying to the login page itself. Build passed; the loop was only visible in a browser.)
 - **Surface ambiguity.** If a detail is missing or ambiguous, ask. Small defaults (variable names, minor file structure decisions, import ordering) are fine to decide autonomously. Anything user-facing or architectural gets surfaced.
 - **Show before you build.** For non-trivial new components, propose the structure and dependencies first. For database schema changes, show the migration SQL before applying.
 - **Flag, don't deviate.** If something in the dev plan seems wrong or incomplete as you work, stop and flag it. The plan is the source of truth; changes come from the user.
@@ -46,7 +47,7 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 
 ## Style and voice
 
-- **No em dashes anywhere in user-facing content.** This applies to UI strings, tooltip text, glossary definitions, editorial copy, and any programmatically generated content. Use commas, semicolons, colons, or parentheses. This is a firm rule.
+- **No em dashes anywhere, including commit messages.** This applies to UI strings, tooltip text, glossary definitions, editorial copy, programmatically generated content, and git commit messages. Use commas, semicolons, colons, or parentheses. This is a firm rule.
 - **Editorial, not marketing.** Specific, confident, restrained.
 - **Typography**: serif display (suggest Fraunces or Instrument Serif), clean sans for body (suggest Inter).
 - **Color palette**: off-white background (`#FAFAF7`), near-black text (`#0A0A0A`), one restrained accent (deep blue or forest green, around `#1E3A5F`).
@@ -71,7 +72,8 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 
 - Never commit `.env.local` or any file containing API keys, service role keys, or secrets.
 - Never import `lib/supabase/admin.ts` (service role client) into a client component. It is server-only.
-- Never expose admin routes to unauthenticated users. Gate in `app/admin/layout.tsx`.
+- Never expose admin routes to unauthenticated users. The auth gate lives in `app/admin/(protected)/layout.tsx` (a route group that wraps all admin pages except `/admin/login`). The outer `app/admin/layout.tsx` is a plain passthrough with no auth check, so the login page remains publicly accessible.
+- **Admin auth model:** the `(protected)` layout gates on session existence only (any authenticated user). All admin mutations use `supabaseAdmin` (service role client), which bypasses RLS. The `is_admin()` DB function exists for RLS on the regular session client but is not enforced at the UI layer. Onboarding an admin user requires only that they can receive a magic link to their email: no special claim is needed. If a second admin with restricted write access is ever needed, add an `is_admin` claim check to `(protected)/layout.tsx`.
 - Never deploy to production without explicit user approval.
 
 ## First session
