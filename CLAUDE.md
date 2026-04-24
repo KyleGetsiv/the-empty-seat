@@ -85,6 +85,30 @@ When the user says "start Phase 0":
 3. Note any missing information or ambiguity (for example: Supabase project credentials, custom domain, Slack webhook URL, Mapbox token, Anthropic API key). Ask for what's needed before starting.
 4. Begin Phase 0, module 0.1 only. Stop when 0.1 is complete and propose the commit message.
 
+## Phase 0 status
+
+Phase 0 is complete as of April 2026. All 7 modules shipped and verified.
+
+**What is live:**
+- Supabase schema: all tables from `dev-plan.md` with RLS policies, `is_admin()` function, and audit log triggers on every table
+- Admin shell: magic link login, `(protected)` route group gating, CRUD for all 7 tables (companies, cities, milestones, sources, fleet_snapshots, ride_estimates, financial_periods), milestone publish toggle
+- Design system: editorial `@theme` in `globals.css`, Fraunces serif + Inter sans loaded via `next/font/google`, Container, Prose, Heading, Button, Card primitives, PageShell with sticky nav and footer
+- Tooltip system: Radix UI Tooltip wrapper with mobile tap-to-reveal and 8-second auto-dismiss, Metric component with info icon, Term component with dotted underline, central glossary with 12 terms
+- Error monitoring: `lib/notify.ts` with graceful no-op when `SLACK_WEBHOOK_URL` is unset, daily health-check cron at `/api/cron/scraper-health` protected by `CRON_SECRET`
+
+**What is deferred to later phases:**
+- Real scrapers (Robotaxi Tracker, SEC EDGAR, Motley Fool transcripts): Phase 1.3 and Phase 4
+- Cron secret rotation before production deployment: do this before Phase 1.6 ship
+- Dedicated production Slack channel (vs. dev channel): set up before Phase 1.6 ship
+- `is_published` trigger for public-page ISR revalidation: needed in Phase 1 when public pages actually render data
+
+**Working agreement refinements from Phase 0:**
+- Per-module commits, no chaining modules even when the next looks trivial
+- Auth and routing modules must be verified via a real browser flow before proposing a commit; build and lint cannot catch redirect loops (reference: 0.6 redirect loop on `/admin/login`)
+- No em dashes in commit messages, same as user-facing content; use colons or commas
+- Tailwind v4 config lives in `globals.css` under `@theme`, not in `tailwind.config.ts`
+- Next.js 16 uses `proxy.ts` with a `proxy` export instead of `middleware.ts`
+
 ## Maintenance of this file
 
 `CLAUDE.md` is a living document. If patterns emerge during the build worth preserving (preferences the user has stated, conventions that have been adopted, rules that have come up), add them here with the user's approval. Keep the file tight; it's the reference card, not the full spec.
