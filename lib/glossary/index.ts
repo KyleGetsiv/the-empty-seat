@@ -102,6 +102,22 @@ export const glossary: Record<string, GlossaryEntry> = {
       "Unit economics answers the question: does each additional ride make money? The key inputs are revenue per ride (fare), variable cost per ride (energy, remote assist, maintenance), and fixed cost per ride (vehicle and sensor amortization, insurance). Contribution margin turns positive when revenue exceeds variable costs. Full profitability requires covering fixed costs too.",
     seeAlso: ["contribution_margin", "capex_intensity", "remote_assist"],
   },
+  weekly_rides: {
+    term: "Weekly Rides",
+    shortDefinition:
+      "The estimated number of paid passenger trips completed by Waymo in a given week, across all active markets.",
+    longDefinition:
+      "Weekly rides is the primary volume metric for Waymo's commercial operations. It is derived from periodic disclosures, analyst estimates, and cross-referenced data sources. Because Waymo does not report weekly figures directly, all estimates carry uncertainty; confidence levels are noted where displayed.",
+    seeAlso: ["rider_only_miles", "unit_economics"],
+  },
+  vehicles_in_fleet: {
+    term: "Vehicles in Fleet",
+    shortDefinition:
+      "The number of autonomous vehicles Waymo has deployed or has available for commercial service.",
+    longDefinition:
+      "Fleet size is a leading indicator of future ride capacity. Waymo has not disclosed precise fleet counts; estimates are derived from permit filings, city-level disclosures, and reported expansion plans. Active vehicle count (vehicles actually completing rides) is a subset of total fleet and is tracked separately where data is available.",
+    seeAlso: ["capex_intensity", "unit_economics"],
+  },
 };
 
 export type GlossaryKey = keyof typeof glossary;

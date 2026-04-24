@@ -381,6 +381,24 @@ export type Database = {
           },
         ]
       }
+      site_content: {
+        Row: {
+          key: string
+          markdown_body: string
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          markdown_body: string
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          markdown_body?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sources: {
         Row: {
           content_hash: string | null

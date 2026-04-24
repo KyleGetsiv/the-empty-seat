@@ -12,6 +12,7 @@ const navItems = [
   { label: "Financial Periods", href: "/admin/financial-periods" },
   { label: "Sources", href: "/admin/sources" },
   { label: "Companies", href: "/admin/companies" },
+  { label: "Site Content", href: "/admin/site-content" },
 ];
 
 async function SignOutButton() {
