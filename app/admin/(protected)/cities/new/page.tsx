@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -24,6 +25,7 @@ export default async function NewCityPage() {
       longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
       notes: (formData.get("notes") as string) || null,
     });
+    revalidatePath("/");
     redirect("/admin/cities");
   }
 

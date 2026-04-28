@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -29,12 +30,14 @@ export default async function EditCityPage({ params }: { params: Promise<{ id: s
       longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
       notes: (formData.get("notes") as string) || null,
     }).eq("id", id);
+    revalidatePath("/");
     redirect("/admin/cities");
   }
 
   async function remove() {
     "use server";
     await supabaseAdmin.from("cities").delete().eq("id", id);
+    revalidatePath("/");
     redirect("/admin/cities");
   }
 
