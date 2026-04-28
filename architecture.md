@@ -16,9 +16,9 @@ consolidate or move historical content to an appendix file.
 
 ## Last updated
 
-Module: 1.2
-Date: 2026-04-27
-Commit: b7daa07
+Module: 1.3
+Date: 2026-04-28
+Commit: 1.3 work
 
 ---
 
@@ -61,7 +61,8 @@ rows here; human-entered data can also reference a source.
 One row per city per company. Holds all operational and geographic data
 for a market. `status` is an enum: 'announced', 'waitlist', 'public',
 'paused'. `service_area_geojson` is reserved; the map currently derives
-circles from `service_area_sq_mi` only.
+circles from `service_area_sq_mi` only. `external_keys` is populated
+lazily by scrapers as they come online (empty `{}` by default).
 
 | column | type | notes |
 |--------|------|-------|
@@ -78,6 +79,7 @@ circles from `service_area_sq_mi` only.
 | longitude | numeric | nullable |
 | notes | text | nullable |
 | service_area_geojson | jsonb | nullable, added 0005, unused by map |
+| external_keys | jsonb | NOT NULL default '{}', added 0006 |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -118,6 +120,7 @@ for company-wide snapshots.
 #### ride_estimates
 Weekly ride volume estimates per company/city. `city_id` null means
 company-wide. `confidence` is an enum: 'high', 'medium', 'low'.
+`vehicle_miles_traveled` is populated by CPUC scraper (quarterly VMT ZEV).
 
 | column | type | notes |
 |--------|------|-------|
@@ -131,6 +134,7 @@ company-wide. `confidence` is an enum: 'high', 'medium', 'low'.
 | source_id | uuid | nullable, fk sources |
 | confidence | text | check constraint |
 | methodology_note | text | nullable |
+| vehicle_miles_traveled | numeric | nullable, added 0007, VMT ZEV from CPUC |
 | created_at | timestamptz | |
 
 #### financial_periods
@@ -194,9 +198,14 @@ trigger only fires on tables with UUID `id` columns.
   Not on `site_content` (text PK, not UUID) or `audit_log` itself.
 - **updated_at triggers:** companies, cities, milestones,
   financial_periods, site_content.
+- **external_keys convention:** cities.external_keys is a jsonb map from
+  source slug to that source's city identifier. Keys: `"robotaxi_tracker"`,
+  `"nhtsa"`, etc. Populated lazily; scrapers write their key when first run.
+  All 11 Waymo cities ship with empty `{}`.
 - **Migration history:** 0001 initial schema; 0002 site_content table;
   0003 drop site_content audit trigger; 0004 cities unique constraint
-  (company_id, name); 0005 cities.service_area_geojson jsonb column.
+  (company_id, name); 0005 cities.service_area_geojson jsonb column;
+  0006 cities.external_keys jsonb + GIN index; 0007 ride_estimates.vehicle_miles_traveled.
 
 ---
 
@@ -254,10 +263,14 @@ those tables drive public pages.
   Counter animation via Framer Motion in ThesisHeroCounter (client).
 - **Thesis:** fetches `thesis_paragraphs` from `site_content` via
   `getSiteContent`, renders markdown. Returns null if key absent.
-- **KeyStats:** currently single-tile (cities count). Full 4-metric
-  band deferred to 1.3.
-- **Operations:** server component, fetches Waymo cities, composes
-  the four 1.2 sub-sections with muted TODO transition paragraphs.
+- **KeyStats:** 4-tile band (avg weekly rides CA, cities served,
+  cumulative trips 2025 CA, miles driven 2025 CA). Tiles 1/3/4 sourced
+  from CPUC ride_estimates rows (city_id = NULL). Tile 2 from cities
+  count. All metric tiles use `<Metric>` with CPUC source link and
+  as-of annotation. Shows `--` with pending note when no CPUC data.
+- **Operations:** server component. Fetches Waymo cities and CPUC
+  quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
+  CoverageMapClient, and methodology footnote.
 
 ### components/ui/
 
@@ -272,8 +285,12 @@ those tables drive public pages.
 - **CityLaunchTimeline (client):** vertical accordion, all 11 cities
   sorted by launch_date. One panel open at a time via local state.
   Framer Motion height animation with `AnimatePresence initial={false}`.
-- **CohortRampChart:** pending state. Large serif placeholder until
-  1.3 scraper data. Uses `Term` on "launch cohort."
+- **QuarterlyTripsChart (client):** Recharts LineChart, X-axis quarterly
+  labels, Y-axis trips (formatted as M). Four data points (Q1-Q4 2025).
+  QoQ growth rate in custom tooltip. Editorial framing paragraph above
+  chart with Robotaxi Tracker outbound link. Pending state (serif
+  paragraph) when data array is empty. As-of footnote with `<Term
+  term="cpuc">` below chart.
 - **CoverageMap (client):** Mapbox GL JS, lazy-loaded via
   CoverageMapClient wrapper (ssr: false). GeoJSON polygon circles for
   cities with sq_mi; fixed 8px pins for cities without. Waitlist
@@ -281,8 +298,6 @@ those tables drive public pages.
   Mapbox Popup. Style overrides on load to match editorial palette.
 - **CoverageMapClient:** `"use client"` dynamic import wrapper. Renders
   a pulsing skeleton while Mapbox loads.
-- **RidesPerVehicleChart:** pending state. Large serif placeholder
-  until 1.3. Uses `Term` on "rides per vehicle per day."
 
 ---
 
@@ -292,34 +307,43 @@ those tables drive public pages.
 
 - **lib/cohorts.ts:** `getCohortBucket(launchDate)` returns bucket
   index (1-5), label, and hex color. `getBucketLegend(dates)` returns
-  sorted distinct buckets for legend rendering. Single source of truth
-  for cohort coloring used by map and chart.
-- **lib/glossary/index.ts:** central glossary, 17 terms. Current keys:
-  disengagement_rate, contribution_margin, autonomous_miles,
+  sorted distinct buckets for legend rendering. Used by CoverageMap;
+  chart use removed in 1.3 (QuarterlyTripsChart uses accent color only).
+- **lib/glossary/index.ts:** central glossary, 18 terms. Added: `cpuc`.
+  Current keys: disengagement_rate, contribution_margin, autonomous_miles,
   rider_only_miles, remote_assist, safety_driver, service_area, odd,
   waymo_driver_gen6, other_bets, capex_intensity, unit_economics,
-  weekly_rides, vehicles_in_fleet, cohort, rides_per_vehicle_per_day,
-  waitlist_city. `GlossaryKey` type is auto-derived.
-- **lib/site-content.ts:** `getSiteContent(key)` server helper, returns
-  `{ markdown_body, updated_at }` or null with a console warning.
-- **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack
-  webhook. No-op if `SLACK_WEBHOOK_URL` is unset.
-- **lib/supabase/server.ts:** session-bound client for RLS-respecting
-  reads. Use in server components, route handlers, server actions.
-- **lib/supabase/admin.ts:** service-role client, bypasses RLS.
-  Server-only (`import "server-only"`). Use for admin mutations.
+  cpuc, weekly_rides, vehicles_in_fleet, cohort,
+  rides_per_vehicle_per_day, waitlist_city. `GlossaryKey` type is
+  auto-derived.
+- **lib/scrapers/cpuc.ts:** `runCpucScrape()` fetches CPUC quarterly
+  data from Robotaxi Tracker's hosted JSON mirror, inserts/updates
+  ride_estimates rows (city_id = NULL, confidence = 'high'). Scoped to
+  trips and VMT ZEV only; incident_metrics and monthly_trends are present
+  in the source file but not consumed. Tries years [2025, 2026]; 404s
+  are skipped gracefully. Dedup by comparing stored rides_per_week and
+  vehicle_miles_traveled. Creates its own Supabase client (no
+  server-only dependency; safe for tsx scripts and GitHub Actions).
+- **lib/site-content.ts:** `getSiteContent(key)` server helper.
+- **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack webhook.
+- **lib/supabase/server.ts:** session-bound client for RLS reads.
+- **lib/supabase/admin.ts:** service-role client, server-only.
 - **lib/supabase/browser.ts:** anon client for client components.
-- **lib/supabase/types.ts:** generated TypeScript types from schema.
+- **lib/supabase/types.ts:** generated types, manually patched for
+  migrations 0006 (cities.external_keys) and 0007
+  (ride_estimates.vehicle_miles_traveled). Regenerate with
+  `supabase gen types typescript` after any future migration.
 
 ### External integrations
 
 | service | status | env vars | notes |
 |---------|--------|---------|-------|
 | Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled |
-| Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | first consumer is CoverageMap (1.2.c) |
+| Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | dev channel | SLACK_WEBHOOK_URL | production channel pending before 1.6 |
 | Anthropic API | not yet wired | ANTHROPIC_API_KEY | reserved for Phase 4 extraction |
-| Vercel Cron | live | CRON_SECRET | scraper-health daily; secret rotation pending before 1.6 |
+| Vercel Cron | live | CRON_SECRET | scraper-health daily; rotation pending before 1.6 |
+| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | .github/workflows/scrape-cpuc.yml, weekly Monday 13:17 UTC |
 
 ---
 
@@ -330,8 +354,8 @@ those tables drive public pages.
   `text-[2.25rem] sm:text-[3rem] leading-tight` with a TODO comment.
   No Card frame. Established 1.1, mirrored in 1.2.b and 1.2.d.
 - **Cohort coloring:** `getCohortBucket(launchDate)` from lib/cohorts.ts.
-  Single-hue ramp, `--color-cohort-1` (oldest) through
-  `--color-cohort-5` (newest), defined in @theme in globals.css.
+  Single-hue ramp, `--color-cohort-1` through `--color-cohort-5`.
+  Used by CoverageMap; not used by QuarterlyTripsChart (accent only).
 - **Revalidation:** server actions call `revalidatePath('/')` after
   mutations. DB-level triggers for ISR revalidation are deferred.
 - **Smooth scroll:** `scroll-behavior: smooth` on `html` in globals.css.
@@ -342,13 +366,17 @@ those tables drive public pages.
   Server actions in page files, not separate route handlers.
 - **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N):` or
   `fix(N.N):`.
+- **external_keys pattern:** scrapers write their city identifier into
+  `cities.external_keys` under their source slug. Column ships as `{}`
+  for all cities; populated lazily when the scraper first runs.
+- **Disclosed-source scrapers:** write to data tables with
+  `confidence='high'`. Community-tracked or estimated sources use
+  `confidence='medium'` or `'low'`.
 
 ---
 
 ## Known gaps and debt
 
-- KeyStats is single-tile (cities count); full 4-metric band lands
-  with 1.3 scraper data.
 - fleet-snapshots, ride-estimates, and financial-periods admin mutations
   do not call `revalidatePath`; harmless until those tables drive public
   pages.
@@ -364,15 +392,35 @@ those tables drive public pages.
   polygon rendering is deferred. TODO comment in CoverageMap.tsx marks
   the insertion point.
 - All public routes except `/` are stubs (not yet built).
+- Quantitative metrics (KeyStats tiles, QuarterlyTripsChart) are
+  California-only because CPUC is the only state regulator publishing
+  per-quarter Waymo data we have access to. Other states do not publish
+  equivalent data.
+- QuarterlyTripsChart is sparse (4 data points: Q1-Q4 2025) until
+  pre-2025 CPUC data is sourced via direct cpuc.ca.gov extraction.
+  Deferred to Phase 4 (patterns overlap with SEC EDGAR pipeline).
+- CPUC source file contains incident_metrics (collisions, complaints,
+  injuries per 100K trips) and monthly_trends. Neither is ingested in
+  1.3. Phase 6 (Safety Dashboard) should consume incident_metrics.
+  monthly_trends ingestion deferred until a chart needs that resolution.
+- Robotaxi Tracker is referenced in the methodology footnote as an
+  external resource for live community-tracked data; it is not a backend
+  source. Decision and rationale documented in commit history.
+- lib/supabase/types.ts was manually patched for migrations 0006 and
+  0007 rather than regenerated; run `supabase gen types typescript` to
+  sync after any future migration.
 
 ---
 
 ## Parking lot
 
 - State-level fill on coverage map (color US states by Waymo presence
-  stage). Raised during 1.2.c scoping, deferred. Open questions:
-  state fill vs. supplement to circles; polygon source; multi-stage
-  coloring rule.
+  stage). Raised during 1.2.c scoping, deferred.
+- Robotaxi Tracker as comparative sidebar source. Community sightings
+  could appear as a corroborating signal alongside disclosed CPUC data,
+  but only after disclosed data is solid. Phase 5 territory if at all.
+- Pre-2025 CPUC baseline via direct cpuc.ca.gov filing extraction.
+  Phase 4 territory (overlaps with SEC EDGAR pipeline build).
 
 ---
 
@@ -408,21 +456,27 @@ components/
     Operations.tsx
   ui/                          Button, Card, Container, Heading, Prose,
                                Tooltip, Metric, Term
-  operations/                  CityLaunchTimeline, CohortRampChart,
-                               CoverageMap, CoverageMapClient,
-                               RidesPerVehicleChart
+  operations/                  CityLaunchTimeline, QuarterlyTripsChart,
+                               CoverageMap, CoverageMapClient
 
 lib/
   cohorts.ts
   site-content.ts
   glossary/index.ts
   notify.ts
+  scrapers/
+    cpuc.ts
   supabase/                    server.ts, admin.ts, browser.ts, types.ts
 
 supabase/
-  migrations/                  0001 through 0005
+  migrations/                  0001 through 0007
   seed.sql                     6 company rows only
 
 scripts/
   seed-cities.ts               one-time city seed (11 Waymo cities)
+  run-scraper-cpuc.ts          CPUC quarterly scraper entry point
+
+.github/
+  workflows/
+    scrape-cpuc.yml            weekly Monday 13:17 UTC, workflow_dispatch
 ```

@@ -1,0 +1,31 @@
+name: Scrape CPUC Quarterly Data
+
+on:
+  schedule:
+    # Weekly, Monday 13:17 UTC. CPUC publishes quarterly; weekly is plenty and gives
+    # prompt detection of new filings without hammering the source.
+    - cron: '17 13 * * 1'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CPUC scraper
+        run: npx tsx scripts/run-scraper-cpuc.ts
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SCRAPER_USER_AGENT: ${{ secrets.SCRAPER_USER_AGENT }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

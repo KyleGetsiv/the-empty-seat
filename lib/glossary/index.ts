@@ -126,6 +126,14 @@ export const glossary: Record<string, GlossaryEntry> = {
       "Waitlist cities are counted separately from public cities in operational metrics. A city transitions from waitlist to public when rides become available to any user without prior registration.",
     seeAlso: ["service_area", "cohort"],
   },
+  cpuc: {
+    term: "CPUC (California Public Utilities Commission)",
+    shortDefinition:
+      "The California regulator that oversees commercial autonomous vehicle deployments and requires quarterly data disclosure from permitted operators.",
+    longDefinition:
+      "The CPUC's Autonomous Vehicle Program requires commercial operators like Waymo to file quarterly reports covering trip volumes, incidents, coverage, and fleet data. These filings are the most granular publicly available data on Waymo's California operations. Fleet counts and drivered-vehicle data are subject to confidentiality claims and are partially redacted in public releases.",
+    seeAlso: ["autonomous_miles", "rider_only_miles"],
+  },
   weekly_rides: {
     term: "Weekly Rides",
     shortDefinition:

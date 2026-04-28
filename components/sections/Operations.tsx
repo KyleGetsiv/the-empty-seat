@@ -2,9 +2,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Container } from "@/components/ui/Container";
 import { Heading } from "@/components/ui/Heading";
 import { CityLaunchTimeline } from "@/components/operations/CityLaunchTimeline";
-import { CohortRampChart } from "@/components/operations/CohortRampChart";
+import {
+  QuarterlyTripsChart,
+  type ChartDataPoint,
+} from "@/components/operations/QuarterlyTripsChart";
 import { CoverageMapClient } from "@/components/operations/CoverageMapClient";
-import { RidesPerVehicleChart } from "@/components/operations/RidesPerVehicleChart";
 import type { TimelineCity } from "@/components/operations/CityLaunchTimeline";
 import type { MapCity } from "@/components/operations/CoverageMapClient";
 
@@ -17,30 +19,60 @@ async function getWaymoCities() {
     .eq("slug", "waymo")
     .single();
 
-  if (!company) return [];
+  if (!company) return { cities: [], waymoId: null };
 
   const { data: cities } = await supabase
     .from("cities")
     .select(
       "id, name, metro_area, launch_date, public_access_date, service_area_sq_mi, status, latitude, longitude"
     )
-    .eq("company_id", company.id)
+    .eq("company_id", (company as { id: string }).id)
     .not("launch_date", "is", null)
     .order("launch_date", { ascending: true });
 
-  return cities ?? [];
+  return { cities: cities ?? [], waymoId: (company as { id: string }).id };
+}
+
+async function getCpucChartData(waymoId: string): Promise<ChartDataPoint[]> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data } = await supabase
+    .from("ride_estimates")
+    .select("period_start, rides_per_week")
+    .eq("company_id", waymoId)
+    .is("city_id", null)
+    .order("period_start", { ascending: true });
+
+  if (!data || data.length === 0) return [];
+
+  const rows = data as { period_start: string; rides_per_week: number }[];
+
+  return rows.map((row, i) => {
+    const d = new Date(row.period_start + "T00:00:00Z");
+    const year = d.getUTCFullYear();
+    const q = Math.floor(d.getUTCMonth() / 3) + 1;
+    const trips = (row.rides_per_week ?? 0) * 13;
+    const prevTrips = i > 0 ? (rows[i - 1].rides_per_week ?? 0) * 13 : null;
+    const qoqGrowth =
+      prevTrips && prevTrips > 0 ? ((trips - prevTrips) / prevTrips) * 100 : null;
+    return { label: `Q${q} ${year}`, trips, qoqGrowth };
+  });
 }
 
 export async function Operations() {
-  const cities = await getWaymoCities();
+  const { cities, waymoId } = await getWaymoCities();
+
+  const cpucChartData: ChartDataPoint[] = waymoId
+    ? await getCpucChartData(waymoId)
+    : [];
 
   const timelineCities: TimelineCity[] = cities
-    .filter((c): c is typeof c & { launch_date: string } => c.launch_date !== null)
+    .filter((c) => c.launch_date !== null)
     .map((c) => ({
       id: c.id,
       name: c.name,
       metro_area: c.metro_area,
-      launch_date: c.launch_date,
+      launch_date: c.launch_date as string,
       public_access_date: c.public_access_date,
       service_area_sq_mi: c.service_area_sq_mi ? Number(c.service_area_sq_mi) : null,
       status: c.status,
@@ -49,14 +81,11 @@ export async function Operations() {
     }));
 
   const mapCities: MapCity[] = cities
-    .filter(
-      (c): c is typeof c & { launch_date: string; latitude: number; longitude: number } =>
-        c.launch_date !== null && c.latitude !== null && c.longitude !== null
-    )
+    .filter((c) => c.launch_date !== null && c.latitude !== null && c.longitude !== null)
     .map((c) => ({
       id: c.id,
       name: c.name,
-      launch_date: c.launch_date,
+      launch_date: c.launch_date as string,
       service_area_sq_mi: c.service_area_sq_mi ? Number(c.service_area_sq_mi) : null,
       status: c.status,
       latitude: Number(c.latitude),
@@ -73,36 +102,46 @@ export async function Operations() {
 
         {/* TODO: user to replace with section intro copy */}
         <p className="mt-3 text-muted text-base max-w-2xl">
-          A live look at where Waymo operates, how each market has ramped since
-          launch, and the utilization metrics that matter most for unit economics.
+          A live look at where Waymo operates, how each market launched, and the quarterly
+          volume trajectory sourced from California Public Utilities Commission filings.
         </p>
 
         <CityLaunchTimeline cities={timelineCities} />
 
-        {/* TODO: user to replace with timeline-to-cohort transition copy */}
+        {/* TODO: user to replace with timeline-to-chart transition copy */}
         <p className="mt-16 mb-10 text-muted text-base max-w-2xl">
-          The timeline above shows when each city came online. The chart below
-          normalizes those launches to a common x-axis so the ramp curves can
-          be compared directly.
+          The timeline above shows when each city came online. The chart below tracks
+          California trip volume quarter by quarter from CPUC regulatory disclosures,
+          the most granular public view of Waymo&apos;s ride trajectory.
         </p>
 
-        <CohortRampChart />
+        <QuarterlyTripsChart data={cpucChartData} />
 
-        {/* TODO: user to replace with cohort-to-map transition copy */}
+        {/* TODO: user to replace with chart-to-map transition copy */}
         <p className="mt-16 mb-10 text-muted text-base max-w-2xl">
-          Each market occupies a distinct footprint. The map below shows service
-          areas at their current scale, colored by launch cohort.
+          Each market occupies a distinct footprint. The map below shows service areas
+          at their current scale.
         </p>
 
         <CoverageMapClient cities={mapCities} />
 
-        {/* TODO: user to replace with map-to-utilization transition copy */}
-        <p className="mt-16 mb-10 text-muted text-base max-w-2xl">
-          Scale and geography tell part of the story. The chart below narrows
-          to the metric that matters most for unit economics.
+        {/* TODO: 1.5 expand into full methodology page treatment */}
+        <p className="mt-16 text-xs text-muted max-w-2xl leading-relaxed">
+          Quarterly figures sourced from California Public Utilities Commission filings
+          via the regulator&apos;s public quarterly disclosures. Coverage is California-only;
+          Waymo operations in other states are reflected in our city launch timeline but not
+          in quarterly volume metrics. For live community-tracked granularity across all
+          Waymo cities,{" "}
+          <a
+            href="https://robotaxitracker.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            see Robotaxi Tracker
+          </a>
+          .
         </p>
-
-        <RidesPerVehicleChart />
       </Container>
     </section>
   );

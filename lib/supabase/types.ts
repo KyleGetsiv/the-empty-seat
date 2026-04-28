@@ -52,6 +52,7 @@ export type Database = {
           company_id: string
           country: string
           created_at: string
+          external_keys: Json
           id: string
           latitude: number | null
           launch_date: string | null
@@ -68,6 +69,7 @@ export type Database = {
           company_id: string
           country?: string
           created_at?: string
+          external_keys?: Json
           id?: string
           latitude?: number | null
           launch_date?: string | null
@@ -84,6 +86,7 @@ export type Database = {
           company_id?: string
           country?: string
           created_at?: string
+          external_keys?: Json
           id?: string
           latitude?: number | null
           launch_date?: string | null
@@ -330,6 +333,7 @@ export type Database = {
           period_start: string
           rides_per_week: number
           source_id: string | null
+          vehicle_miles_traveled: number | null
         }
         Insert: {
           avg_fare_usd?: number | null
@@ -343,6 +347,7 @@ export type Database = {
           period_start: string
           rides_per_week: number
           source_id?: string | null
+          vehicle_miles_traveled?: number | null
         }
         Update: {
           avg_fare_usd?: number | null
@@ -356,6 +361,7 @@ export type Database = {
           period_start?: string
           rides_per_week?: number
           source_id?: string | null
+          vehicle_miles_traveled?: number | null
         }
         Relationships: [
           {
