@@ -102,6 +102,30 @@ export const glossary: Record<string, GlossaryEntry> = {
       "Unit economics answers the question: does each additional ride make money? The key inputs are revenue per ride (fare), variable cost per ride (energy, remote assist, maintenance), and fixed cost per ride (vehicle and sensor amortization, insurance). Contribution margin turns positive when revenue exceeds variable costs. Full profitability requires covering fixed costs too.",
     seeAlso: ["contribution_margin", "capex_intensity", "remote_assist"],
   },
+  cohort: {
+    term: "Launch Cohort",
+    shortDefinition:
+      "A group of cities that launched within the same time period, used to compare how ride volume ramps across markets.",
+    longDefinition:
+      "Grouping cities by launch cohort normalizes for the age of each market, making it possible to compare Phoenix (launched 2020) with Los Angeles (launched 2024) on the same time axis. Each cohort is colored consistently across charts and the coverage map.",
+    seeAlso: ["service_area", "rides_per_vehicle_per_day"],
+  },
+  rides_per_vehicle_per_day: {
+    term: "Rides Per Vehicle Per Day",
+    shortDefinition:
+      "A utilization metric: total daily rides divided by active fleet size. The cleanest single read on operational efficiency.",
+    longDefinition:
+      "Higher rides per vehicle per day means each vehicle is earning more revenue and amortizing its fixed costs faster. The metric compresses fleet size and ride volume into one number, making it easier to compare markets of different scales and to track efficiency gains over time.",
+    seeAlso: ["unit_economics", "vehicles_in_fleet", "weekly_rides"],
+  },
+  waitlist_city: {
+    term: "Waitlist City",
+    shortDefinition:
+      "A market where Waymo has announced service but is not yet operating publicly, typically with a signup form for early access.",
+    longDefinition:
+      "Waitlist cities are counted separately from public cities in operational metrics. A city transitions from waitlist to public when rides become available to any user without prior registration.",
+    seeAlso: ["service_area", "cohort"],
+  },
   weekly_rides: {
     term: "Weekly Rides",
     shortDefinition:

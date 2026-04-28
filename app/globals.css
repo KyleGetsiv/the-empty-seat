@@ -40,6 +40,16 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+
+  /* Cohort color scale: single-hue ramp anchored on accent (#1E3A5F).
+     Numbered 1 (oldest) through 5 (newest). Used by CoverageMap and
+     CohortRampChart; always import from lib/cohorts.ts, never reference
+     these tokens directly in components. */
+  --color-cohort-1: #0D1E32;
+  --color-cohort-2: #1E3A5F;
+  --color-cohort-3: #3D6A9E;
+  --color-cohort-4: #7BAAD0;
+  --color-cohort-5: #B8D4E8;
 }
 
 * {
@@ -51,6 +61,7 @@ html {
   color: #0A0A0A;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
