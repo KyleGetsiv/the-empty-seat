@@ -70,6 +70,37 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 - **Audit trigger limitation**: `audit_trigger_fn()` (defined in `0001_initial_schema.sql`) is hard-coded to read `NEW.id`, so it only works on tables with a UUID `id` column. Tables with non-UUID primary keys (e.g., `site_content`, which uses `key text` as PK) cannot use the audit trigger as-is. Three options when this comes up again: (1) skip the audit trigger on the table (acceptable for config or copy tables, less so for analytical tables); (2) generalize `audit_trigger_fn()` in a future migration to handle arbitrary primary keys via `to_jsonb(NEW)`; (3) add a UUID `id` column to the new table with the natural key as a unique constraint. `site_content` uses option (1). When a future non-UUID table is needed, surface and decide before writing the migration.
 - **Show migration SQL before applying**: every migration, no matter how small, must have its full SQL shown to the user and approved before the file is written and `supabase db push` is run. This applies to fix migrations as well as feature migrations. (Reference: migration 0003 was pushed after only a prose description, not a SQL review.)
 
+## Architecture maintenance
+
+`architecture.md` is the living snapshot of the repo state. It is updated at the end of every module that changes schema, routes, components, conventions, integrations, or debt, in the same commit as the module work. The maintenance block below is appended to every module prompt and should be followed even when a module prompt forgets to include it:
+
+ARCHITECTURE UPDATE (do this in the same commit as the module work)
+After browser verification passes and before proposing the commit:
+
+  1. Open architecture.md and update every section affected by this
+     module: new or changed tables (Schema), new routes (Routes), new
+     or changed components (Components), new lib files or integrations
+     (Libraries), any new conventions codified (Conventions), any new
+     debt or resolved debt items (Known gaps and debt), any new parking-
+     lot items (Parking lot), and the file structure appendix if new
+     directories or files were added. Also update the Migration history
+     line in Cross-cutting schema notes if this module added a migration.
+
+  2. Update the "Last updated" header:
+       Module: <this module number, e.g. 1.3>
+       Date: <today's date YYYY-MM-DD>
+       Commit: <module> work  (e.g. "1.3 work")
+
+  3. Confirm the file stays under 500 lines (`wc -l architecture.md`).
+     Note: wc -l counts blank lines, so practical content is closer to
+     380 lines of text. If the file is at or above 480 lines, stop and
+     surface before committing so we can consolidate together rather
+     than silently going over.
+
+  4. Stage architecture.md alongside all other module files in the
+     same commit. Do not make a separate commit for the architecture
+     update.
+
 ## Security rules
 
 - Never commit `.env.local` or any file containing API keys, service role keys, or secrets.
