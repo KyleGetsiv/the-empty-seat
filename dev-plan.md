@@ -33,10 +33,11 @@ Two reference sites inform the design direction. Claude Code will not have acces
 5. **Ship vertical slices.** Each phase that has a public face ships independently. Every ship is a distribution moment.
 6. **Admin UX matters.** If annotating data is painful, the site goes stale. Budget 20% of every phase for admin ergonomics.
 7. **Multi-company data, single-company site.** Every data table includes a `company_id` foreign key. The public frontend is Waymo-only. Do not build generic "company page" components or a company switcher UI in any phase covered by this plan.
+8. **Disclosed sources, not community-tracked.** The site's quantitative claims rest on primary regulatory and corporate disclosures (SEC filings, state PUC quarterly reports, official Waymo communications). Community-tracked or estimated data sources are referenced as outbound links for readers wanting live granularity, not ingested as backend data. The audience is sophisticated readers of financial documents; they want sources they can verify, not aggregator dashboards.
 
 ## Tech stack (fixed, do not substitute)
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, Recharts, Framer Motion
+- **Frontend**: Next.js 16 (App Router, `proxy.ts` not `middleware.ts`), TypeScript, Tailwind CSS v4 (CSS-based `@theme` config in `app/globals.css`, no `tailwind.config.ts`), Recharts, Framer Motion
 - **Hosting**: Vercel
 - **Database**: Supabase (Postgres, Auth, Storage in a single project)
 - **Background jobs**: Vercel Cron for lightweight scheduled tasks, GitHub Actions for heavier scrapes
@@ -73,8 +74,8 @@ If a task appears to require a substitution (e.g., a package unavailable, an API
   /sections             Page-level sections (ThesisHero, OperationsTimeline, etc.)
   /admin                Admin-specific components
 /lib
-  /supabase             Supabase client setup (server + browser)
-  /scrapers             Scraper modules (one file per source)
+  /supabase             Supabase client setup (server + browser + admin)
+  /scrapers             Scraper modules (one file per source); see lib/scrapers/cpuc.ts for the canonical pattern
   /extraction           Anthropic extraction pipeline
   /glossary             Central glossary data for tooltips
   /utils
@@ -313,37 +314,47 @@ audit_log
 **Do**:
 - Build `components/sections/ThesisHero.tsx`: full-viewport hero with the site name, a short tagline, and a large animated counter showing Waymo's weekly ride count. The counter pulls from the most recent `ride_estimates` row for Waymo where `city_id IS NULL` (company-wide estimate). Animation: count up from 0 to current value on first scroll into view (use Framer Motion's `useInView` and a tween).
 - Below the hero: a 3-paragraph thesis written in editorial voice explaining (a) what Waymo is and how it makes money, (b) why it matters now (commercial inflection, scaling cities, unit economics question), (c) what this site does: systematic tracking of the operational and financial picture. The user will provide final copy through the admin UI; for now, render from a `thesis_copy` row in a new simple `site_content` table (key/value: `key text unique`, `markdown_body text`, `updated_at`). Placeholder copy can be drafted by Claude Code with a comment noting it is placeholder.
-- Below the thesis: a key-stats band with four `<Metric>` components showing rides/week, cities served, autonomous miles, vehicles in fleet. Each pulls from the latest relevant row with appropriate tooltip explanations.
+- Below the thesis: a key-stats band with four `<Metric>` components, all pulling from CPUC quarterly disclosures (California operations only) except where noted:
+  1. Weekly rides (CA): weekly average over the most recent quarter, derived as `total_trips / weeks_in_quarter` from the latest CPUC filing.
+  2. Cities served: count of Waymo cities with status 'public' or 'waitlist', from the `cities` table (not CA-specific).
+  3. Cumulative trips (latest full year, CA): sum of all four quarterly `total_trips` for the most recent complete calendar year.
+  4. Vehicle miles (latest full year, CA): sum of all four quarterly `total_vmt_zev` for the most recent complete calendar year.
+  
+  Each tile's tooltip explains the derivation, cites CPUC as the source, and surfaces the CA-only scope where applicable. The "as of" date for tiles 1, 3, and 4 is the period_end of the latest CPUC quarter.
 
 **Acceptance**: landing page renders the hero, thesis, and stats band. Counter animates correctly. Tooltips work on all metrics. Swapping the thesis copy through admin updates the page on next revalidation.
 
 ### 1.2 Operations section
 
 **Do**:
-- Build four sub-sections on the landing page below the thesis:
+- Build three sub-sections on the landing page below the thesis. Per-city ride volumes and per-city fleet counts are not disclosed by Waymo or any state regulator we have access to; the original cohort ramp and rides-per-vehicle visuals (which depended on this data) have been replaced with a CA-quarterly trips chart driven by CPUC disclosures.
 
-**1.2.a City launch timeline**. Horizontal timeline showing every city launch. X-axis is time; each city is a dot at its launch date. Clicking a dot expands a panel showing: city name, launch date, service area, current fleet, current rides/week estimate, status. Data source: `cities` table joined to latest `fleet_snapshots` and `ride_estimates`.
+**1.2.a City launch timeline**. Vertical accordion showing every Waymo city sorted by `launch_date`. Clicking a city expands a panel showing: city name, launch date, service area in sq mi, status. Per-city fleet and ride volumes are not shown because they are not disclosed. Data source: `cities` table.
 
-**1.2.b Cohort ramp chart**. The differentiating visual. X-axis is "months since city launch" (normalized to zero per city). Y-axis is rides per week (toggle-able to vehicles or rides per vehicle per day). One line per city. Lets the reader see Phoenix's ramp vs. SF's ramp vs. LA's ramp overlaid. This is a SaaS-style cohort chart applied to AV, and it is rare. Wrap with `<Metric>` tooltips explaining the methodology.
+**1.2.b Coverage map**. Mapbox GL JS map centered on the US, zoomable. Each city's service area shown as a polygon (or a circle of equivalent area, derived from `service_area_sq_mi` and `latitude, longitude`, until polygon geometry is added in a future migration). Polygons color-coded by launch cohort (`getCohortBucket` from `lib/cohorts.ts`). Hovering a polygon shows the city name and key stats. Waitlist cities styled with dashed outline and reduced fill opacity. A `service_area_geojson` column on `cities` is reserved for future polygon support.
 
-**1.2.c Coverage map**. Mapbox GL JS map centered on the US, zoomable. Each city's service area shown as a polygon. Polygons color-coded by launch cohort (2024 launches one shade, 2025 another, 2026 another). Hovering a polygon shows the city name and key stats. If `service_area_sq_mi` is stored but the actual polygon geometry is not, for v1 render a circle of equivalent area centered on `latitude, longitude`; add a `service_area_geojson` column to `cities` in a new migration for future polygon support.
+**1.2.c Quarterly trips chart**. Time-series line chart driven by CPUC quarterly disclosures, populated by the scraper built in 1.3. X-axis is calendar quarters, Y-axis is fulfilled trips per quarter (California only). Annotation of QoQ growth rate at each point. As-of footnote below the chart noting the latest available quarter and expected timing of the next disclosure. Editorial framing in a single paragraph above the chart explaining that California is Waymo's largest market and a useful proxy for company trajectory; for live cross-state granularity, link out to Robotaxi Tracker.
 
-**1.2.d Rides per vehicle per day chart**. Time-series line chart showing the derived metric (rides_per_week / 7) / vehicle_count, per city, over time. This is one of the most important unit economics inputs and deserves its own visual.
+A methodology footnote at the bottom of the Operations section attributes CPUC as the primary source and points readers to Robotaxi Tracker for live community-tracked granularity.
 
-**Acceptance**: all four sub-sections render with seeded data; when the user adds a new city or snapshot via admin, charts update on next revalidation; mobile responsive (charts reflow, timeline becomes vertical or horizontally scrollable).
+**Acceptance**: all three sub-sections render with seeded and CPUC-sourced data; when the user adds a new city via admin or new CPUC data lands via the scraper, charts update on next revalidation; mobile responsive.
 
-### 1.3 Robotaxi Tracker ingestion
+### 1.3 CPUC quarterly ingestion
+
+**Background**: Discovery during planning revealed that Robotaxi Tracker's public data is community-spotted vehicle sightings and cumulative trip totals, not official fleet counts or weekly ride volumes; their `/api/*` endpoints are blocked by `robots.txt`. The right primary source for a finance-oriented site is the California Public Utilities Commission's quarterly Waymo deployment filings, which Robotaxi Tracker mirrors as a structured JSON file at `/data/cpuc-waymo-deployment-YYYY.json`. Robotaxi Tracker becomes an outbound methodology link, not a backend dependency.
 
 **Do**:
-- Create `lib/scrapers/robotaxi_tracker.ts`. Target: Robotaxi Tracker's public data. Start by attempting to inspect the site's network requests for JSON endpoints. If no clean API is available, fall back to HTML parsing.
-- Scraper should run hourly via GitHub Action (`.github/workflows/scrape-robotaxi-tracker.yml`).
-- On each run: fetch latest vehicle counts and ride volume estimates per Waymo city, compute content hash, skip insert if hash matches the most recent row, otherwise insert a new row into `fleet_snapshots` and/or `ride_estimates` with `source_id` pointing to a Robotaxi Tracker `sources` row.
-- Every insert has `confidence = 'medium'` with a methodology note citing Robotaxi Tracker.
-- On scraper failure, call `notifySlack`.
-- Because this is a third-party source, include User-Agent header identifying the project (via `SCRAPER_USER_AGENT` env var) and respect a reasonable rate limit (one request every few seconds).
-- Add a `Methodology` note on the landing page Operations section visibly attributing Robotaxi Tracker as a data source with a link.
+- Add migration `0006_cities_external_keys.sql`: `ALTER TABLE cities ADD COLUMN external_keys jsonb NOT NULL DEFAULT '{}'::jsonb`, plus a GIN index. No data updates; subsequent scrapers populate per source. This is the standard pattern for cross-source city mapping (CPUC, NHTSA, Waymo blog all map cities differently).
+- Add migration `0007_ride_estimates_vehicle_miles.sql`: `ALTER TABLE ride_estimates ADD COLUMN vehicle_miles_traveled numeric` (nullable). CPUC reports vehicle-miles-traveled per quarter and the data warrants a first-class column.
+- Insert a sources row for CPUC: `url` pointing to `https://www.cpuc.ca.gov/regulatory-services/licensing/transportation-licensing-and-analysis-branch/autonomous-vehicle-programs/quarterly-reporting`, `publisher` 'California Public Utilities Commission', `title` 'Waymo Quarterly AV Deployment Data'.
+- Create `lib/scrapers/cpuc.ts`. Fetches the JSON file from `https://robotaxitracker.com/data/cpuc-waymo-deployment-YYYY.json` (current year) and parses `quarter_summaries`. For each quarter, looks up an existing `ride_estimates` row by `(company_id, period_start, period_end)`. Computes content hash over `(period_start, period_end, total_trips, total_vmt_zev)`. Inserts new rows or updates existing rows on hash mismatch (CPUC sometimes restates quarters). Fields: `city_id = NULL` (CA company-wide), `rides_per_week = total_trips / 13`, `vehicle_miles_traveled = total_vmt_zev`, `confidence = 'high'`, methodology note explaining CPUC sourcing and the Robotaxi Tracker mirror.
+- The CPUC source file also contains `incident_metrics` (collisions, complaints, injuries per 100K trips) and `monthly_trends`. The 1.3 scraper does not consume these. Phase 6 (Safety Dashboard) extends the parser to consume `incident_metrics`. `monthly_trends` is deferred until a chart needs that resolution.
+- Scraper runs weekly via GitHub Action (`.github/workflows/scrape-cpuc.yml`), Monday 13:17 UTC. CPUC publishes quarterly with a roughly 6-week lag; weekly polling is sufficient.
+- On scraper failure, call `notifySlack` at error level. On success, post info-level summary with insert/update counts.
+- Use `SCRAPER_USER_AGENT` env var. 2-second delay between any multi-file fetches.
+- Add a methodology footnote at the bottom of the Operations section attributing CPUC and pointing readers to Robotaxi Tracker for live granularity.
 
-**Acceptance**: scraper runs successfully in GitHub Actions, populates `fleet_snapshots` and `ride_estimates` with new rows, does not create duplicate rows on re-run, failures surface in Slack, frontend reflects scraped data on next revalidation.
+**Acceptance**: scraper runs successfully in GitHub Actions, populates `ride_estimates` with quarterly CPUC rows, updates rows on restated quarters without duplicating, failures surface in Slack, KeyStats and QuarterlyTripsChart reflect CPUC data on next revalidation, methodology footnote renders.
 
 ### 1.4 Milestones feed
 
@@ -708,11 +719,12 @@ competitor_snapshots
 - Each cell shows value + "as of" date (some competitors disclose less frequently)
 - Visual "lead multiple" indicator on Waymo row where applicable
 
-### 5.3 Waymo vs. Tesla weekly rides chart
+### 5.3 Waymo vs. Tesla disclosed-data comparison
 
 **Do**:
-- Time-series chart pulling from `ride_estimates` for Waymo and Tesla (Tesla data from Robotaxi Tracker scraper; extend Phase 1 scraper to also capture Tesla if available, or add a new source)
-- Annotate key events on the chart (major city launches, announcements)
+- Build a comparison view between Waymo (CPUC-disclosed quarterly trips, CA only, sourced via the Phase 1.3 scraper) and Tesla (whatever disclosed source exists at Phase 5 planning time). Tesla does not have a CA PUC equivalent because they were not yet running paid driverless service in California as of Phase 1; this should be re-investigated when Phase 5 begins. Possible sources: Tesla quarterly investor updates, NHTSA SGO incident-derived ride volume signal, state regulator filings if Texas or other Tesla operating states publish equivalent data.
+- If no disclosed Tesla source exists at Phase 5 planning time, surface and decide: ship the comparison with disclosed-Waymo and Robotaxi-Tracker-Tesla (clearly labeled with mixed-confidence methodology), or defer the comparison to a later phase.
+- Annotate key events on the chart (major city launches, announcements).
 
 ### 5.4 China context
 
@@ -737,9 +749,10 @@ competitor_snapshots
 ### 6.1 Data ingestion
 
 **Do**:
-- NHTSA Standing General Order incident data: monthly scrape (`lib/scrapers/nhtsa_sgo.ts`). Filter for Waymo-involved incidents.
+- CPUC `incident_metrics`: extend the existing `lib/scrapers/cpuc.ts` parser (built in Phase 1.3) to also consume `incident_metrics` and `coverage` fields from the CPUC JSON. Write to a new `safety_incidents` table or directly into a quarterly safety summary table. Decide schema based on what the dashboard needs at 6.2 design time. The CPUC file already covers California, which is Waymo's largest disclosed market; this gives a real disclosed safety baseline before NHTSA or DMV data lands.
+- NHTSA Standing General Order incident data: monthly scrape (`lib/scrapers/nhtsa_sgo.ts`). Filter for Waymo-involved incidents. National coverage.
 - CA DMV disengagement report: annual scrape (`lib/scrapers/ca_dmv_disengagement.ts`), published in February.
-- Waymo Safety Hub blog: RSS scrape, filed as `milestones` with `safety` tag
+- Waymo Safety Hub blog: RSS scrape, filed as `milestones` with `safety` tag.
 
 ### 6.2 Safety metrics dashboard
 
