@@ -24,6 +24,8 @@ export default async function EditSiteContentPage({
       .update({ markdown_body: formData.get("markdown_body") as string })
       .eq("key", key);
     revalidatePath("/");
+    revalidatePath("/methodology");
+    revalidatePath("/methodology/sources");
     redirect("/admin/site-content");
   }
 

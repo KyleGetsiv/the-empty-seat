@@ -83,17 +83,14 @@ export function QuarterlyTripsChart({ data }: { data: ChartDataPoint[] }) {
           </>
         )}
         California is Waymo's largest and most closely regulated market, and the only state
-        where quarterly trip data is publicly disclosed. For live community-tracked data across
-        all Waymo cities,{" "}
+        where quarterly trip data is publicly disclosed. See the{" "}
         <a
-          href="https://robotaxitracker.com"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/methodology"
           className="underline text-foreground hover:text-accent transition-colors"
         >
-          see Robotaxi Tracker
+          methodology page
         </a>
-        .
+        {" "}for source details and a pointer to live community-tracked data.
       </p>
 
       <div className="h-72 w-full">

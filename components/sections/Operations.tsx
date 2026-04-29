@@ -125,22 +125,17 @@ export async function Operations() {
 
         <CoverageMapClient cities={mapCities} />
 
-        {/* TODO: 1.5 expand into full methodology page treatment */}
         <p className="mt-16 text-xs text-muted max-w-2xl leading-relaxed">
-          Quarterly figures sourced from California Public Utilities Commission filings
-          via the regulator&apos;s public quarterly disclosures. Coverage is California-only;
-          Waymo operations in other states are reflected in our city launch timeline but not
-          in quarterly volume metrics. For live community-tracked granularity across all
-          Waymo cities,{" "}
+          Quarterly figures sourced from California Public Utilities Commission filings.
+          See our{" "}
           <a
-            href="https://robotaxitracker.com"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/methodology"
             className="underline hover:text-foreground transition-colors"
           >
-            see Robotaxi Tracker
+            methodology page
           </a>
-          .
+          {" "}for full source attribution, data limitations, and a pointer to live
+          community-tracked data.
         </p>
       </Container>
     </section>

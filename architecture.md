@@ -9,16 +9,15 @@ This file is not the plan (see dev-plan.md) and not the working
 agreement (see CLAUDE.md). It is the answer to "what currently exists
 and what's known about it."
 
-Hard rule: keep this file under 500 lines. When it grows past that,
-consolidate or move historical content to an appendix file.
+Hard rule: keep this file under 500 lines. Consolidate when it grows past that.
 
 ---
 
 ## Last updated
 
-Module: 1.4
+Module: 1.5
 Date: 2026-04-28
-Commit: 1.4 work
+Commit: 1.5 work
 
 ---
 
@@ -218,9 +217,11 @@ trigger only fires on tables with UUID `id` columns.
 | / | ThesisHero, Thesis, KeyStats, Operations, RecentMilestones | ride_estimates, site_content, cities, milestones | ISR 3600s; on-demand from admin mutations |
 | /milestones | MilestoneCard listing, tag filter chips | milestones | ISR 3600s |
 | /milestones/[id] | full detail, source link, annotation | milestones, sources | ISR 3600s; 404 for drafts |
+| /methodology | MarkdownBody render of methodology_body from site_content; falls back to PLACEHOLDER const if key absent | site_content | ISR 3600s; on-demand when site_content admin saves |
+| /methodology/sources | Auto-generated source list grouped by publisher, sorted published_at DESC | sources | ISR 3600s; on-demand when sources admin mutates |
 
-All other public routes (methodology, unit-economics, financials,
-earnings, landscape, safety, outlook) are planned but not yet built.
+All other public routes (unit-economics, financials, earnings, landscape,
+safety, outlook) are planned but not yet built.
 
 ### Admin routes
 
@@ -246,9 +247,10 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /api/cron/scraper-health | daily health check cron | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
 
-Note: fleet-snapshots, ride-estimates, and financial-periods admin
-mutations do not yet call `revalidatePath`. Not a problem until
-those tables drive public pages.
+Note: fleet-snapshots, ride-estimates, financial-periods mutations do
+not call revalidatePath; harmless until those tables drive public pages.
+Sources now revalidate /methodology/sources. Site-content now revalidates
+/methodology and /methodology/sources.
 
 ---
 
@@ -256,9 +258,10 @@ those tables drive public pages.
 
 ### components/sections/
 
-- **PageShell:** site-wide sticky nav and footer. Nav uses plain `<a>`
-  tags for in-page anchors (/#operations etc.) and Next.js Link for
-  routes. `scroll-behavior: smooth` handles scroll animation globally.
+- **PageShell:** async server component; sticky nav and footer. Calls
+  `getGlobalLastUpdated()` and renders "Last updated: Month D, YYYY" in
+  footer. Methodology is in desktop nav with `opacity-70` (meta-link).
+  `scroll-behavior: smooth` handles scroll animation globally.
 - **ThesisHero:** full-viewport hero with animated ride count. Pending
   state (large serif paragraph) when `ride_estimates` is empty.
   Counter animation via Framer Motion in ThesisHeroCounter (client).
@@ -283,6 +286,10 @@ those tables drive public pages.
 - **Metric:** numeric value with info icon; tooltip shows explanation,
   source, as-of date.
 - **Term:** dotted underline; tooltip shows glossary entry by key.
+- **MarkdownBody:** react-markdown + remark-gfm + rehype-raw. Full
+  markdown support (headings, lists, tables, blockquotes, code). HTML
+  comments pass through as real HTML comments (invisible to readers).
+  Admin-authored content only; rehype-raw is safe in this context.
 
 ### components/milestones/
 
@@ -316,6 +323,8 @@ those tables drive public pages.
 
 ### lib/
 
+- **lib/last-updated.ts:** `getGlobalLastUpdated()`: max timestamp across
+  8 data tables (excludes audit_log). Used by PageShell footer.
 - **lib/milestones/tags.ts:** `MILESTONE_TAGS` const array (8 slugs),
   `MilestoneTag` type, `tagLabel(tag)` display-label function. Single
   source of truth for tag vocabulary; imported by admin pages and public
@@ -365,71 +374,57 @@ those tables drive public pages.
 
 ## Conventions adopted
 
-- **Pending-state pattern:** section + Container always rendered,
-  ternary inside, pending branch is a serif paragraph at
-  `text-[2.25rem] sm:text-[3rem] leading-tight` with a TODO comment.
-  No Card frame. Established 1.1, mirrored in 1.2.b and 1.2.d.
-- **Cohort coloring:** `getCohortBucket(launchDate)` from lib/cohorts.ts.
-  Single-hue ramp, `--color-cohort-1` through `--color-cohort-5`.
-  Used by CoverageMap; not used by QuarterlyTripsChart (accent only).
-- **Revalidation:** server actions call `revalidatePath('/')` after
-  mutations. DB-level triggers for ISR revalidation are deferred.
-- **Smooth scroll:** `scroll-behavior: smooth` on `html` in globals.css.
-  Anchored sections use `scroll-mt-20` to clear sticky nav.
-- **Lazy-loading client-heavy components:** `next/dynamic` with
-  `ssr: false` in a `"use client"` wrapper file. See CoverageMapClient.
-- **Admin mutations:** always use `supabaseAdmin` (service-role).
-  Server actions in page files, not separate route handlers.
-- **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N):` or
-  `fix(N.N):`.
-- **external_keys pattern:** scrapers write their city identifier into
-  `cities.external_keys` under their source slug. Column ships as `{}`
-  for all cities; populated lazily when the scraper first runs.
-- **Disclosed-source scrapers:** write to data tables with
-  `confidence='high'`. Community-tracked or estimated sources use
-  `confidence='medium'` or `'low'`.
+- **Pending-state pattern:** section + Container always rendered; pending
+  branch is serif paragraph at `text-[2.25rem] sm:text-[3rem]`. No Card.
+- **Cohort coloring:** `getCohortBucket(launchDate)`. Used by CoverageMap.
+- **Revalidation:** server actions call `revalidatePath`. DB-level ISR
+  triggers deferred.
+- **Smooth scroll:** `scroll-behavior: smooth` on html; sections use
+  `scroll-mt-20`.
+- **Lazy-loading:** `next/dynamic` with `ssr: false` in a `"use client"`
+  wrapper. See CoverageMapClient.
+- **Admin mutations:** `supabaseAdmin` (service-role); server actions in
+  page files.
+- **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N):`.
+- **external_keys:** scrapers write city identifiers under their source slug;
+  ships as `{}`, populated lazily.
+- **Confidence levels:** disclosed-source scrapers use `'high'`; community
+  or estimated sources use `'medium'` or `'low'`.
+- **Methodology copy:** factual sections seeded by Claude Code; editorial
+  framing and changelog are user-authored. `<!-- TODO -->` HTML comments
+  mark user-authored sections (invisible to readers). Content in
+  `site_content` keyed `methodology_body`.
+- **Public route layout:** `app/(public)/layout.tsx` wraps all `(public)`
+  routes with PageShell. The homepage at root uses PageShell directly.
 
 ---
 
 ## Known gaps and debt
 
-- fleet-snapshots, ride-estimates, and financial-periods admin mutations
-  do not call `revalidatePath`; harmless until those tables drive public
-  pages.
-- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables cannot
-  use it. Options documented in CLAUDE.md.
-- CRON_SECRET rotation deferred until before 1.6 production deploy.
-- Dedicated production Slack channel deferred until before 1.6.
-- `is_published` trigger for ISR revalidation not yet wired. Mitigated
-  for milestones: all three admin mutations call revalidatePath for
-  /milestones and /. A DB-level trigger for direct Supabase edits is deferred.
-- City detail pages (`/cities/[slug]`) referenced in timeline accordion
-  as disabled links; not yet built.
-- `service_area_geojson` column exists but the map does not consume it;
-  polygon rendering is deferred. TODO comment in CoverageMap.tsx marks
-  the insertion point.
-- All public routes except `/`, `/milestones`, and `/milestones/[id]` are stubs (not yet built).
-- Quantitative metrics are California-only; CPUC is the only state
-  regulator publishing per-quarter Waymo data. Other states don't publish
-  equivalent data.
-- QuarterlyTripsChart is sparse (Q1-Q4 2025 only); pre-2025 CPUC baseline
-  deferred to Phase 4 (overlaps with SEC EDGAR pipeline).
-- CPUC source file contains incident_metrics and monthly_trends; neither
-  ingested in 1.3. Phase 6 (Safety Dashboard) should consume incident_metrics.
-- lib/supabase/types.ts manually patched for 0006 and 0007; regenerate
-  with `supabase gen types typescript` after any future migration.
+**Pre-1.6 blockers:**
+- Methodology contact email is `placeholder@example.com`; replace before ship.
+- Methodology TODO HTML comments (intro, estimation, changelog) need user copy.
+- CRON_SECRET rotation and production Slack channel deferred to 1.6.
+
+**Structural debt:**
+- fleet-snapshots, ride-estimates, financial-periods mutations do not revalidatePath.
+- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded (CLAUDE.md).
+- `is_published` DB-level ISR trigger not wired; admin mutation revalidation covers it.
+- City detail pages not built; timeline shows disabled links.
+- `service_area_geojson` exists but unused; polygon rendering deferred.
+- All public routes except /, /milestones*, /methodology* are stubs.
+- Quantitative metrics are California-only; no per-quarter data for other states.
+- QuarterlyTripsChart has Q1-Q4 2025 only; pre-2025 CPUC baseline deferred to Phase 4.
+- CPUC incident_metrics and monthly_trends not ingested; Phase 6 territory.
+- lib/supabase/types.ts manually patched for 0006, 0007; regenerate after migrations.
 
 ---
 
 ## Parking lot
 
-- State-level fill on coverage map (color US states by Waymo presence
-  stage). Raised during 1.2.c scoping, deferred.
-- Robotaxi Tracker as comparative sidebar source. Community sightings
-  could appear as a corroborating signal alongside disclosed CPUC data,
-  but only after disclosed data is solid. Phase 5 territory if at all.
-- Pre-2025 CPUC baseline via direct cpuc.ca.gov filing extraction.
-  Phase 4 territory (overlaps with SEC EDGAR pipeline build).
+- State-level fill on coverage map (US states colored by Waymo stage). Deferred 1.2.c.
+- Robotaxi Tracker as corroborating signal alongside CPUC data. Phase 5 territory.
+- Pre-2025 CPUC baseline via cpuc.ca.gov extraction. Phase 4 (overlaps SEC EDGAR).
 
 ---
 
@@ -441,9 +436,13 @@ app/
   layout.tsx                   root layout, TooltipProvider, fonts
   globals.css                  @theme tokens, scroll-behavior, cohort colors
   (public)/
+    layout.tsx                 wraps children in PageShell (nav + footer)
     milestones/
       page.tsx                 listing with tag filter chips
       [id]/page.tsx            detail page, 404 for drafts
+    methodology/
+      page.tsx                 MarkdownBody render of methodology_body
+      sources/page.tsx         auto-generated source list grouped by publisher
   admin/
     layout.tsx                 passthrough, no auth check
     login/                     magic link page
@@ -469,7 +468,7 @@ components/
     Operations.tsx
     RecentMilestones.tsx
   ui/                          Button, Card, Container, Heading, Prose,
-                               Tooltip, Metric, Term
+                               Tooltip, Metric, Term, MarkdownBody
   operations/                  CityLaunchTimeline, QuarterlyTripsChart,
                                CoverageMap, CoverageMapClient
   milestones/                  MilestoneCard
@@ -493,6 +492,7 @@ scripts/
   seed-cities.ts               one-time city seed (11 Waymo cities)
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
   seed-recent-waymo-milestones.ts  6 seed milestones (one-time, idempotent)
+  seed-methodology-content.ts  upserts methodology_body into site_content
 
 .github/
   workflows/

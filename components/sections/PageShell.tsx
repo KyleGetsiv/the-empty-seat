@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
+import { getGlobalLastUpdated } from "@/lib/last-updated";
+import { format } from "date-fns";
 
 const navLinks = [
   { label: "Thesis", href: "/#thesis" },
@@ -16,10 +18,12 @@ const navLinks = [
 
 interface PageShellProps {
   children: ReactNode;
-  lastUpdated?: string | null;
 }
 
-export function PageShell({ children, lastUpdated }: PageShellProps) {
+export async function PageShell({ children }: PageShellProps) {
+  const lastUpdatedDate = await getGlobalLastUpdated();
+  const lastUpdated = lastUpdatedDate ? format(lastUpdatedDate, "MMMM d, yyyy") : null;
+
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
@@ -44,8 +48,14 @@ export function PageShell({ children, lastUpdated }: PageShellProps) {
                   {link.label}
                 </a>
               ))}
+              <a
+                href="/methodology"
+                className="text-sm text-muted hover:text-foreground transition-colors whitespace-nowrap opacity-70"
+              >
+                Methodology
+              </a>
             </nav>
-            {/* Mobile: section name list abbreviated */}
+            {/* Mobile: abbreviated */}
             <nav
               aria-label="Mobile navigation"
               className="lg:hidden flex items-center gap-4 overflow-x-auto text-sm"

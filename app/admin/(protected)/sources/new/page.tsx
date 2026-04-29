@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -11,7 +12,10 @@ export default function NewSourcePage() {
       publisher: formData.get("publisher") as string,
       published_at: (formData.get("published_at") as string) || null,
     });
-    if (!error) redirect("/admin/sources");
+    if (!error) {
+      revalidatePath("/methodology/sources");
+      redirect("/admin/sources");
+    }
   }
 
   return (

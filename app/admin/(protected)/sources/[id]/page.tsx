@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -15,12 +16,14 @@ export default async function EditSourcePage({ params }: { params: Promise<{ id:
       publisher: formData.get("publisher") as string,
       published_at: (formData.get("published_at") as string) || null,
     }).eq("id", id);
+    revalidatePath("/methodology/sources");
     redirect("/admin/sources");
   }
 
   async function remove() {
     "use server";
     await supabaseAdmin.from("sources").delete().eq("id", id);
+    revalidatePath("/methodology/sources");
     redirect("/admin/sources");
   }
 
