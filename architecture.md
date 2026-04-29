@@ -16,9 +16,9 @@ consolidate or move historical content to an appendix file.
 
 ## Last updated
 
-Module: 1.3
+Module: 1.4
 Date: 2026-04-28
-Commit: 1.3 work
+Commit: 1.4 work
 
 ---
 
@@ -215,11 +215,12 @@ trigger only fires on tables with UUID `id` columns.
 
 | path | renders | data sources | revalidation |
 |------|---------|--------------|--------------|
-| / | ThesisHero, Thesis, KeyStats, Operations | ride_estimates, site_content, cities | ISR 3600s; on-demand from cities/fleet/ride admin mutations |
+| / | ThesisHero, Thesis, KeyStats, Operations, RecentMilestones | ride_estimates, site_content, cities, milestones | ISR 3600s; on-demand from admin mutations |
+| /milestones | MilestoneCard listing, tag filter chips | milestones | ISR 3600s |
+| /milestones/[id] | full detail, source link, annotation | milestones, sources | ISR 3600s; 404 for drafts |
 
-All other public routes (milestones, methodology, unit-economics,
-financials, earnings, landscape, safety, outlook) are planned but not
-yet built.
+All other public routes (methodology, unit-economics, financials,
+earnings, landscape, safety, outlook) are planned but not yet built.
 
 ### Admin routes
 
@@ -236,9 +237,9 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/cities | list | none | n/a |
 | /admin/cities/new | create | insert | / |
 | /admin/cities/[id] | edit, delete | update, delete | / |
-| /admin/milestones | list, publish toggle | update is_published | /admin/milestones |
-| /admin/milestones/new | create | insert | n/a |
-| /admin/milestones/[id] | edit, delete | update, delete | n/a |
+| /admin/milestones | list, publish toggle | update is_published | /admin/milestones, /milestones, / |
+| /admin/milestones/new | create | insert | /milestones, / |
+| /admin/milestones/[id] | edit, delete | update, delete | /milestones, / |
 | /admin/site-content | list | none | n/a |
 | /admin/site-content/[key] | edit | upsert | / |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
@@ -271,6 +272,9 @@ those tables drive public pages.
 - **Operations:** server component. Fetches Waymo cities and CPUC
   quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
   CoverageMapClient, and methodology footnote.
+- **RecentMilestones:** server component. Fetches 5 most recent published
+  milestones. Renders MilestoneCard list with "View all" link. Returns
+  null if no published milestones. Section id="milestones".
 
 ### components/ui/
 
@@ -279,6 +283,13 @@ those tables drive public pages.
 - **Metric:** numeric value with info icon; tooltip shows explanation,
   source, as-of date.
 - **Term:** dotted underline; tooltip shows glossary entry by key.
+
+### components/milestones/
+
+- **MilestoneCard:** shared card component for listing and landing page.
+  Shows date, tag chips (using `tagLabel`), headline, body preview
+  (line-clamp-3), and annotation. `linked` prop wraps in Next.js Link;
+  false for non-linked uses.
 
 ### components/operations/
 
@@ -305,6 +316,11 @@ those tables drive public pages.
 
 ### lib/
 
+- **lib/milestones/tags.ts:** `MILESTONE_TAGS` const array (8 slugs),
+  `MilestoneTag` type, `tagLabel(tag)` display-label function. Single
+  source of truth for tag vocabulary; imported by admin pages and public
+  pages alike. Current tags: new_city, technology, operations,
+  partnership, international, safety, financial, scale_metrics.
 - **lib/cohorts.ts:** `getCohortBucket(launchDate)` returns bucket
   index (1-5), label, and hex color. `getBucketLegend(dates)` returns
   sorted distinct buckets for legend rendering. Used by CoverageMap;
@@ -384,31 +400,24 @@ those tables drive public pages.
   use it. Options documented in CLAUDE.md.
 - CRON_SECRET rotation deferred until before 1.6 production deploy.
 - Dedicated production Slack channel deferred until before 1.6.
-- `is_published` trigger for ISR revalidation not yet wired; needed
-  when milestones and other published content drive public pages.
+- `is_published` trigger for ISR revalidation not yet wired. Mitigated
+  for milestones: all three admin mutations call revalidatePath for
+  /milestones and /. A DB-level trigger for direct Supabase edits is deferred.
 - City detail pages (`/cities/[slug]`) referenced in timeline accordion
   as disabled links; not yet built.
 - `service_area_geojson` column exists but the map does not consume it;
   polygon rendering is deferred. TODO comment in CoverageMap.tsx marks
   the insertion point.
-- All public routes except `/` are stubs (not yet built).
-- Quantitative metrics (KeyStats tiles, QuarterlyTripsChart) are
-  California-only because CPUC is the only state regulator publishing
-  per-quarter Waymo data we have access to. Other states do not publish
+- All public routes except `/`, `/milestones`, and `/milestones/[id]` are stubs (not yet built).
+- Quantitative metrics are California-only; CPUC is the only state
+  regulator publishing per-quarter Waymo data. Other states don't publish
   equivalent data.
-- QuarterlyTripsChart is sparse (4 data points: Q1-Q4 2025) until
-  pre-2025 CPUC data is sourced via direct cpuc.ca.gov extraction.
-  Deferred to Phase 4 (patterns overlap with SEC EDGAR pipeline).
-- CPUC source file contains incident_metrics (collisions, complaints,
-  injuries per 100K trips) and monthly_trends. Neither is ingested in
-  1.3. Phase 6 (Safety Dashboard) should consume incident_metrics.
-  monthly_trends ingestion deferred until a chart needs that resolution.
-- Robotaxi Tracker is referenced in the methodology footnote as an
-  external resource for live community-tracked data; it is not a backend
-  source. Decision and rationale documented in commit history.
-- lib/supabase/types.ts was manually patched for migrations 0006 and
-  0007 rather than regenerated; run `supabase gen types typescript` to
-  sync after any future migration.
+- QuarterlyTripsChart is sparse (Q1-Q4 2025 only); pre-2025 CPUC baseline
+  deferred to Phase 4 (overlaps with SEC EDGAR pipeline).
+- CPUC source file contains incident_metrics and monthly_trends; neither
+  ingested in 1.3. Phase 6 (Safety Dashboard) should consume incident_metrics.
+- lib/supabase/types.ts manually patched for 0006 and 0007; regenerate
+  with `supabase gen types typescript` after any future migration.
 
 ---
 
@@ -431,6 +440,10 @@ app/
   page.tsx                     landing page composition
   layout.tsx                   root layout, TooltipProvider, fonts
   globals.css                  @theme tokens, scroll-behavior, cohort colors
+  (public)/
+    milestones/
+      page.tsx                 listing with tag filter chips
+      [id]/page.tsx            detail page, 404 for drafts
   admin/
     layout.tsx                 passthrough, no auth check
     login/                     magic link page
@@ -454,15 +467,19 @@ components/
     Thesis.tsx
     KeyStats.tsx
     Operations.tsx
+    RecentMilestones.tsx
   ui/                          Button, Card, Container, Heading, Prose,
                                Tooltip, Metric, Term
   operations/                  CityLaunchTimeline, QuarterlyTripsChart,
                                CoverageMap, CoverageMapClient
+  milestones/                  MilestoneCard
 
 lib/
   cohorts.ts
   site-content.ts
   glossary/index.ts
+  milestones/
+    tags.ts
   notify.ts
   scrapers/
     cpuc.ts
@@ -475,6 +492,7 @@ supabase/
 scripts/
   seed-cities.ts               one-time city seed (11 Waymo cities)
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
+  seed-recent-waymo-milestones.ts  6 seed milestones (one-time, idempotent)
 
 .github/
   workflows/

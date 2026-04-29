@@ -1,8 +1,8 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { MILESTONE_TAGS, tagLabel } from "@/lib/milestones/tags";
 import Link from "next/link";
-
-const TAGS = ["new_city", "technology", "operations", "partnership", "international", "safety", "financial"];
 
 export default async function EditMilestonePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +19,7 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
 
   async function update(formData: FormData) {
     "use server";
-    const tags = TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
+    const tags = MILESTONE_TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
     await supabaseAdmin.from("milestones").update({
       company_id: formData.get("company_id") as string,
       event_date: formData.get("event_date") as string,
@@ -30,12 +30,16 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
       kyle_annotation: (formData.get("kyle_annotation") as string) || null,
       is_published: formData.get("is_published") === "on",
     }).eq("id", id);
+    revalidatePath("/milestones");
+    revalidatePath("/");
     redirect("/admin/milestones");
   }
 
   async function remove() {
     "use server";
     await supabaseAdmin.from("milestones").delete().eq("id", id);
+    revalidatePath("/milestones");
+    revalidatePath("/");
     redirect("/admin/milestones");
   }
 
@@ -48,7 +52,7 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
       </div>
 
       <form action={update} className="flex flex-col gap-4 bg-white border border-gray-200 rounded-lg p-6 mb-6">
-        {/* Publish toggle — prominent at top */}
+        {/* Publish toggle */}
         <div className={`flex items-center justify-between rounded-lg px-4 py-3 border ${milestone.is_published ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200"}`}>
           <div>
             <p className="text-sm font-semibold text-gray-800">
@@ -83,11 +87,13 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-          <div className="flex flex-wrap gap-3">
-            {TAGS.map((tag) => (
-              <label key={tag} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                <input type="checkbox" name={`tag_${tag}`} defaultChecked={milestone.tags?.includes(tag)} className="rounded border-gray-300" />
-                {tag.replace("_", " ")}
+          <div className="flex flex-wrap gap-2">
+            {MILESTONE_TAGS.map((tag) => (
+              <label key={tag} className="group cursor-pointer">
+                <input type="checkbox" name={`tag_${tag}`} defaultChecked={milestone.tags?.includes(tag)} className="sr-only peer" />
+                <span className="inline-block rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-700 group-hover:border-gray-400">
+                  {tagLabel(tag)}
+                </span>
               </label>
             ))}
           </div>

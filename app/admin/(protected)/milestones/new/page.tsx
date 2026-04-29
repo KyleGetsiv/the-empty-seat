@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { MILESTONE_TAGS, tagLabel } from "@/lib/milestones/tags";
 import Link from "next/link";
 
-const TAGS = ["new_city", "technology", "operations", "partnership", "international", "safety", "financial"];
+const todayISO = new Date().toISOString().slice(0, 10);
 
 export default async function NewMilestonePage() {
   const { data: rawCompanies } = await supabaseAdmin.from("companies").select("id, slug, display_name").order("display_name");
@@ -14,7 +16,7 @@ export default async function NewMilestonePage() {
 
   async function create(formData: FormData) {
     "use server";
-    const tags = TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
+    const tags = MILESTONE_TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
     await supabaseAdmin.from("milestones").insert({
       company_id: formData.get("company_id") as string,
       event_date: formData.get("event_date") as string,
@@ -25,6 +27,8 @@ export default async function NewMilestonePage() {
       kyle_annotation: (formData.get("kyle_annotation") as string) || null,
       is_published: formData.get("is_published") === "on",
     });
+    revalidatePath("/milestones");
+    revalidatePath("/");
     redirect("/admin/milestones");
   }
 
@@ -37,7 +41,7 @@ export default async function NewMilestonePage() {
       </div>
 
       <form action={create} className="flex flex-col gap-4 bg-white border border-gray-200 rounded-lg p-6">
-        {/* Publish toggle — prominent at top */}
+        {/* Publish toggle */}
         <div className="flex items-center justify-between rounded-lg bg-yellow-50 border border-yellow-200 px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-gray-800">Publish status</p>
@@ -58,7 +62,7 @@ export default async function NewMilestonePage() {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Event date *</label>
-          <input name="event_date" type="date" required className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          <input name="event_date" type="date" required defaultValue={todayISO} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Headline *</label>
@@ -70,11 +74,13 @@ export default async function NewMilestonePage() {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-          <div className="flex flex-wrap gap-3">
-            {TAGS.map((tag) => (
-              <label key={tag} className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                <input type="checkbox" name={`tag_${tag}`} className="rounded border-gray-300" />
-                {tag.replace("_", " ")}
+          <div className="flex flex-wrap gap-2">
+            {MILESTONE_TAGS.map((tag) => (
+              <label key={tag} className="group cursor-pointer">
+                <input type="checkbox" name={`tag_${tag}`} className="sr-only peer" />
+                <span className="inline-block rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 transition-colors peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-700 group-hover:border-gray-400">
+                  {tagLabel(tag)}
+                </span>
               </label>
             ))}
           </div>

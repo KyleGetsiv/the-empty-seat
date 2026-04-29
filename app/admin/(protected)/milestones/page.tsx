@@ -15,6 +15,8 @@ export default async function MilestonesPage() {
     const current = formData.get("current") === "true";
     await supabaseAdmin.from("milestones").update({ is_published: !current }).eq("id", id);
     revalidatePath("/admin/milestones");
+    revalidatePath("/milestones");
+    revalidatePath("/");
   }
 
   return (
