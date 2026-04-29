@@ -379,10 +379,8 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
 - **Cohort coloring:** `getCohortBucket(launchDate)`. Used by CoverageMap.
 - **Revalidation:** server actions call `revalidatePath`. DB-level ISR
   triggers deferred.
-- **Smooth scroll:** `scroll-behavior: smooth` on html; sections use
-  `scroll-mt-20`.
-- **Lazy-loading:** `next/dynamic` with `ssr: false` in a `"use client"`
-  wrapper. See CoverageMapClient.
+- **Smooth scroll:** `scroll-behavior: smooth`; sections use `scroll-mt-20`.
+- **Lazy-loading:** `next/dynamic` with `ssr: false`. See CoverageMapClient.
 - **Admin mutations:** `supabaseAdmin` (service-role); server actions in
   page files.
 - **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N):`.
@@ -394,8 +392,11 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
   framing and changelog are user-authored. `<!-- TODO -->` HTML comments
   mark user-authored sections (invisible to readers). Content in
   `site_content` keyed `methodology_body`.
-- **Public route layout:** `app/(public)/layout.tsx` wraps all `(public)`
-  routes with PageShell. The homepage at root uses PageShell directly.
+- **Public route layout (canonical pattern):** `app/(public)/layout.tsx`
+  wraps every `(public)` route in PageShell. New public pages go inside
+  `(public)` and render content only. Homepage at root is the exception:
+  outside `(public)`, calls PageShell directly. Root cause of the 1.4
+  milestones nav/footer bug: this layout was missing.
 
 ---
 

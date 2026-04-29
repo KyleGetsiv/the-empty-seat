@@ -44,9 +44,9 @@ Waymo's official blog at waymo.com is the primary source for city launch announc
 
 ### Robotaxi Tracker
 
-Robotaxi Tracker (robotaxitracker.com) aggregates community-spotted sightings of autonomous vehicles across multiple cities and operators. It is referenced on this site as an outbound resource for live, community-tracked granularity across all Waymo cities.
+[Robotaxi Tracker](https://robotaxitracker.com) aggregates community-spotted sightings of autonomous vehicles across multiple cities and operators. For readers who want live, community-tracked granularity across all Waymo cities, it is the best available resource.
 
-Robotaxi Tracker is not a backend data source for this site. Its data consists of community sightings rather than disclosed operational figures, and its terms restrict automated API access. We reference it as a supplementary resource for readers who want real-time community tracking that our disclosed-source approach cannot provide.
+Robotaxi Tracker is not a backend data source for this site. Its data consists of community sightings rather than disclosed operational figures, and its terms restrict automated API access. The quantitative metrics on this site are sourced exclusively from official regulatory filings; Robotaxi Tracker is listed here so readers know where to find the complementary community view.
 
 ## Update Frequency
 
