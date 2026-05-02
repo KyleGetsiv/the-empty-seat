@@ -15,9 +15,9 @@ Hard rule: keep this file under 500 lines. Consolidate when it grows past that.
 
 ## Last updated
 
-Module: 1.5
-Date: 2026-04-28
-Commit: 1.5 work
+Module: 1.5a
+Date: 2026-05-02
+Commit: 1.5a work
 
 ---
 
@@ -26,19 +26,10 @@ Commit: 1.5 work
 ### Tables
 
 #### companies
-Reference table for AV companies. Six rows seeded (Waymo plus five
-competitors). The public frontend is Waymo-only; competitor rows exist
-for future comparative data.
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| slug | text | unique, e.g. 'waymo' |
-| display_name | text | |
-| founded_year | int | nullable |
-| parent_company | text | nullable |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+Reference table. Six rows seeded: Waymo plus five competitors. Columns:
+`id` (pk), `slug` (unique), `display_name`, `founded_year` (nullable),
+`parent_company` (nullable), `created_at`, `updated_at`. Public frontend
+is Waymo-only; competitor rows exist for future comparative data.
 
 #### sources
 Tracks every primary source linked to a data point. Scrapers insert
@@ -101,20 +92,11 @@ admin-only. Public RLS policy filters to published rows only.
 | updated_at | timestamptz | |
 
 #### fleet_snapshots
-Point-in-time vehicle counts per company/city. `city_id` is nullable
-for company-wide snapshots.
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| company_id | uuid | fk companies |
-| city_id | uuid | nullable, fk cities |
-| snapshot_date | date | |
-| vehicle_count | int | |
-| active_vehicle_count | int | nullable |
-| source_id | uuid | nullable, fk sources |
-| notes | text | nullable |
-| created_at | timestamptz | |
+Point-in-time vehicle counts per company/city. `city_id` nullable for
+company-wide snapshots. Columns: `id` (pk), `company_id`, `city_id`
+(nullable, fk cities), `snapshot_date`, `vehicle_count`,
+`active_vehicle_count` (nullable), `source_id` (nullable), `notes`
+(nullable), `created_at`.
 
 #### ride_estimates
 Weekly ride volume estimates per company/city. `city_id` null means
@@ -169,20 +151,11 @@ CLAUDE.md audit trigger limitation note). `updated_at` tracks changes.
 | updated_at | timestamptz | |
 
 #### audit_log
-Append-only log written by `audit_trigger_fn()` on every mutating
-operation. Admin-read only via RLS. `record_id` is UUID, so the
-trigger only fires on tables with UUID `id` columns.
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| user_id | uuid | nullable |
-| table_name | text | |
-| record_id | uuid | |
-| action | text | 'insert', 'update', 'delete' |
-| before | jsonb | nullable |
-| after | jsonb | nullable |
-| created_at | timestamptz | |
+Append-only log written by `audit_trigger_fn()`. Admin-read only via
+RLS. `record_id` is UUID; trigger only fires on tables with UUID `id`
+columns. Columns: `id` (pk), `user_id` (nullable), `table_name`,
+`record_id`, `action` ('insert'/'update'/'delete'), `before` (jsonb,
+nullable), `after` (jsonb, nullable), `created_at`.
 
 ### Cross-cutting schema notes
 
@@ -197,14 +170,19 @@ trigger only fires on tables with UUID `id` columns.
   Not on `site_content` (text PK, not UUID) or `audit_log` itself.
 - **updated_at triggers:** companies, cities, milestones,
   financial_periods, site_content.
+- **Disclosed metrics convention:** most-recent company-wide disclosures
+  live in `site_content` under keys prefixed `latest_*_disclosed`. The
+  `markdown_body` stores YAML-style text: `value`, `as_of` (YYYY-MM-DD),
+  `source_id` (UUID referencing `sources`). `lib/disclosed-metrics.ts`
+  parses and joins. Hero and KeyStats prefer disclosed values over CPUC
+  aggregates and fall back gracefully if absent or malformed.
 - **external_keys convention:** cities.external_keys is a jsonb map from
   source slug to that source's city identifier. Keys: `"robotaxi_tracker"`,
   `"nhtsa"`, etc. Populated lazily; scrapers write their key when first run.
   All 11 Waymo cities ship with empty `{}`.
-- **Migration history:** 0001 initial schema; 0002 site_content table;
-  0003 drop site_content audit trigger; 0004 cities unique constraint
-  (company_id, name); 0005 cities.service_area_geojson jsonb column;
-  0006 cities.external_keys jsonb + GIN index; 0007 ride_estimates.vehicle_miles_traveled.
+- **Migration history:** 0001 initial; 0002 site_content; 0003 drop
+  site_content trigger; 0004 cities unique (company_id, name); 0005
+  service_area_geojson; 0006 external_keys + GIN; 0007 VMT field.
 
 ---
 
@@ -241,16 +219,15 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/milestones | list, publish toggle | update is_published | /admin/milestones, /milestones, / |
 | /admin/milestones/new | create | insert | /milestones, / |
 | /admin/milestones/[id] | edit, delete | update, delete | /milestones, / |
-| /admin/site-content | list | none | n/a |
+| /admin/site-content | list + create new key form | insert | /admin/site-content/[key] |
 | /admin/site-content/[key] | edit | upsert | / |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
 | /api/cron/scraper-health | daily health check cron | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
 
-Note: fleet-snapshots, ride-estimates, financial-periods mutations do
-not call revalidatePath; harmless until those tables drive public pages.
-Sources now revalidate /methodology/sources. Site-content now revalidates
-/methodology and /methodology/sources.
+Note: fleet-snapshots/ride-estimates/financial-periods mutations do not
+call revalidatePath. Sources revalidates /methodology/sources; site-content
+revalidates /methodology and /methodology/sources.
 
 ---
 
@@ -262,16 +239,21 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
   `getGlobalLastUpdated()` and renders "Last updated: Month D, YYYY" in
   footer. Methodology is in desktop nav with `opacity-70` (meta-link).
   `scroll-behavior: smooth` handles scroll animation globally.
-- **ThesisHero:** full-viewport hero with animated ride count. Pending
-  state (large serif paragraph) when `ride_estimates` is empty.
-  Counter animation via Framer Motion in ThesisHeroCounter (client).
+- **ThesisHero:** full-viewport hero with animated ride count. Prefers
+  `getLatestDisclosedWeeklyRides()` over CPUC; caption reads "WEEKLY RIDES,
+  AS OF [date]" or "ESTIMATED WEEKLY RIDES" accordingly. Pending state
+  (large serif paragraph) when both null. Counter animation via Framer Motion
+  in ThesisHeroCounter (client).
 - **Thesis:** fetches `thesis_paragraphs` from `site_content` via
   `getSiteContent`, renders markdown. Returns null if key absent.
-- **KeyStats:** 4-tile band (avg weekly rides CA, cities served,
-  cumulative trips 2025 CA, miles driven 2025 CA). Tiles 1/3/4 sourced
-  from CPUC ride_estimates rows (city_id = NULL). Tile 2 from cities
-  count. All metric tiles use `<Metric>` with CPUC source link and
-  as-of annotation. Shows `--` with pending note when no CPUC data.
+- **KeyStats:** 4-tile band (weekly rides, cities served, cumulative
+  trips 2025 CA, miles driven 2025 CA). Tile 1 prefers disclosed
+  worldwide value from `getLatestDisclosedWeeklyRides()`; falls back to
+  CPUC. Label is "WEEKLY RIDES" when disclosed, "AVG WEEKLY RIDES (CA)"
+  on fallback. Tooltip on tile 1 cites Waymo source and notes worldwide
+  scope when disclosed. Tiles 3/4 always from CPUC. Tile 2 from cities
+  count. All metric tiles use `<Metric>` with source link and as-of
+  annotation. Shows `--` with pending note when no data available.
 - **Operations:** server component. Fetches Waymo cities and CPUC
   quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
   CoverageMapClient, and methodology footnote.
@@ -334,21 +316,20 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
   index (1-5), label, and hex color. `getBucketLegend(dates)` returns
   sorted distinct buckets for legend rendering. Used by CoverageMap;
   chart use removed in 1.3 (QuarterlyTripsChart uses accent color only).
-- **lib/glossary/index.ts:** central glossary, 18 terms. Added: `cpuc`.
-  Current keys: disengagement_rate, contribution_margin, autonomous_miles,
-  rider_only_miles, remote_assist, safety_driver, service_area, odd,
-  waymo_driver_gen6, other_bets, capex_intensity, unit_economics,
-  cpuc, weekly_rides, vehicles_in_fleet, cohort,
-  rides_per_vehicle_per_day, waitlist_city. `GlossaryKey` type is
-  auto-derived.
-- **lib/scrapers/cpuc.ts:** `runCpucScrape()` fetches CPUC quarterly
-  data from Robotaxi Tracker's hosted JSON mirror, inserts/updates
-  ride_estimates rows (city_id = NULL, confidence = 'high'). Scoped to
-  trips and VMT ZEV only; incident_metrics and monthly_trends are present
-  in the source file but not consumed. Tries years [2025, 2026]; 404s
-  are skipped gracefully. Dedup by comparing stored rides_per_week and
-  vehicle_miles_traveled. Creates its own Supabase client (no
-  server-only dependency; safe for tsx scripts and GitHub Actions).
+- **lib/glossary/index.ts:** central glossary, 18 terms. Keys include:
+  disengagement_rate, contribution_margin, autonomous_miles, remote_assist,
+  safety_driver, service_area, cpuc, weekly_rides, vehicles_in_fleet,
+  cohort, rides_per_vehicle_per_day, waitlist_city, and others.
+  `GlossaryKey` type is auto-derived.
+- **lib/scrapers/cpuc.ts:** `runCpucScrape()` fetches CPUC quarterly data
+  from Robotaxi Tracker's JSON mirror; inserts/updates ride_estimates rows
+  (city_id = NULL, confidence = 'high'). Trips and VMT ZEV only; incident_metrics deferred.
+- **lib/disclosed-metrics.ts:** `getLatestDisclosedWeeklyRides()` reads
+  the `latest_weekly_rides_disclosed` site_content row, parses the
+  YAML-style `markdown_body` (fields: `value`, `as_of`, `source_id`),
+  joins to the `sources` table, and returns structured data. Returns null
+  with a console warning if the row is absent, malformed, or references a
+  missing source. Called by ThesisHero and KeyStats.
 - **lib/site-content.ts:** `getSiteContent(key)` server helper.
 - **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack webhook.
 - **lib/supabase/server.ts:** session-bound client for RLS reads.
@@ -381,9 +362,8 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
   triggers deferred.
 - **Smooth scroll:** `scroll-behavior: smooth`; sections use `scroll-mt-20`.
 - **Lazy-loading:** `next/dynamic` with `ssr: false`. See CoverageMapClient.
-- **Admin mutations:** `supabaseAdmin` (service-role); server actions in
-  page files.
-- **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N):`.
+- **Admin mutations:** `supabaseAdmin` (service-role); server actions in page files.
+- **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N)`.
 - **external_keys:** scrapers write city identifiers under their source slug;
   ships as `{}`, populated lazily.
 - **Confidence levels:** disclosed-source scrapers use `'high'`; community
@@ -397,6 +377,9 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
   `(public)` and render content only. Homepage at root is the exception:
   outside `(public)`, calls PageShell directly. Root cause of the 1.4
   milestones nav/footer bug: this layout was missing.
+- **Admin server action error pattern:** capture `{ data, error }` from
+  Supabase calls; throw on non-null error before `revalidatePath`/`redirect`.
+  Applied to site-content actions; 16 others are still bare-await (see Known gaps).
 
 ---
 
@@ -408,6 +391,17 @@ Sources now revalidate /methodology/sources. Site-content now revalidates
 - CRON_SECRET rotation and production Slack channel deferred to 1.6.
 
 **Structural debt:**
+- **16 admin mutations use bare-await anti-pattern (next commit):** no
+  error check in milestones, cities, financial-periods, ride-estimates,
+  fleet-snapshots, sources/[id], companies/[id] actions.
+- **site_content YAML textarea:** free-form text; collapsing the multi-line
+  format to one line causes silent parser failure. Pre-fill with template
+  content rather than placeholder text. Deferred.
+- Disclosed weekly rides (`latest_weekly_rides_disclosed`) is a manual
+  site_content entry; must be updated when Waymo makes new disclosures.
+  If episodic disclosures become more frequent, consider promoting to a
+  dedicated `disclosed_metrics` table. The `latest_*_disclosed` key
+  prefix is the agreed convention for future additions.
 - fleet-snapshots, ride-estimates, financial-periods mutations do not revalidatePath.
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded (CLAUDE.md).
 - `is_published` DB-level ISR trigger not wired; admin mutation revalidation covers it.
@@ -476,6 +470,7 @@ components/
 
 lib/
   cohorts.ts
+  disclosed-metrics.ts
   site-content.ts
   glossary/index.ts
   milestones/
@@ -494,6 +489,8 @@ scripts/
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
   seed-recent-waymo-milestones.ts  6 seed milestones (one-time, idempotent)
   seed-methodology-content.ts  upserts methodology_body into site_content
+  update-methodology-disclosed-source.ts  prepends two-tier sourcing para to methodology_body
+  fix-disclosed-row-formatting.ts         one-time fix for malformed latest_weekly_rides_disclosed row
 
 .github/
   workflows/

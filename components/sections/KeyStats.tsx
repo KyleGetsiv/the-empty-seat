@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getLatestDisclosedWeeklyRides } from "@/lib/disclosed-metrics";
 import { Container } from "@/components/ui/Container";
 import { Metric } from "@/components/ui/Metric";
 
@@ -21,6 +22,15 @@ function fmtMillions(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
+function formatDisclosedDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 async function getCitiesServed(waymoId: string): Promise<number> {
   const supabase = await createSupabaseServerClient();
   const { count } = await supabase
@@ -34,7 +44,6 @@ async function getCitiesServed(waymoId: string): Promise<number> {
 async function getCpucStats(waymoId: string): Promise<CpucStats> {
   const supabase = await createSupabaseServerClient();
 
-  // Fetch all company-wide quarterly rows (city_id = null) ordered newest first
   const { data } = await supabase
     .from("ride_estimates")
     .select("rides_per_week, vehicle_miles_traveled, period_end, period_start")
@@ -84,7 +93,7 @@ async function getCpucStats(waymoId: string): Promise<CpucStats> {
 function periodToQuarterLabel(periodStart: string): string {
   const d = new Date(periodStart + "T00:00:00Z");
   const year = d.getUTCFullYear();
-  const month = d.getUTCMonth(); // 0-indexed
+  const month = d.getUTCMonth();
   const q = Math.floor(month / 3) + 1;
   return `Q${q} ${year}`;
 }
@@ -101,9 +110,10 @@ export async function KeyStats() {
 
   const waymoId = (waymo as { id: string }).id;
 
-  const [citiesServed, cpuc] = await Promise.all([
+  const [citiesServed, cpuc, disclosed] = await Promise.all([
     getCitiesServed(waymoId),
     getCpucStats(waymoId),
+    getLatestDisclosedWeeklyRides(),
   ]);
 
   return (
@@ -111,9 +121,17 @@ export async function KeyStats() {
       <Container className="py-16 sm:py-20">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-12">
 
-          {/* Tile 1: Weekly rides (CA) */}
+          {/* Tile 1: Weekly rides (disclosed worldwide, or CPUC CA fallback) */}
           <div className="flex flex-col gap-2">
-            {cpuc.hasData && cpuc.latestRidesPerWeek !== null ? (
+            {disclosed ? (
+              <Metric
+                value={fmtCount(disclosed.value)}
+                explanation={<>From Waymo&apos;s most recent company-wide disclosure.</>}
+                sourceUrl={disclosed.source.url}
+                asOf={formatDisclosedDate(disclosed.as_of)}
+                className="text-[3.25rem] leading-none tabular-nums"
+              />
+            ) : cpuc.hasData && cpuc.latestRidesPerWeek !== null ? (
               <Metric
                 value={fmtCount(cpuc.latestRidesPerWeek)}
                 explanation={
@@ -133,7 +151,7 @@ export async function KeyStats() {
               </span>
             )}
             <p className="text-sm font-medium text-foreground tracking-wide uppercase">
-              Avg weekly rides (CA)
+              {disclosed ? "Weekly rides" : "Avg weekly rides (CA)"}
             </p>
           </div>
 
@@ -208,7 +226,7 @@ export async function KeyStats() {
 
         </div>
 
-        {!cpuc.hasData && (
+        {!cpuc.hasData && !disclosed && (
           <p className="mt-10 text-sm text-muted max-w-sm leading-relaxed">
             California CPUC quarterly data populates tiles 1, 3, and 4 once the scraper has run.
           </p>

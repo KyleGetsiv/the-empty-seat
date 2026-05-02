@@ -19,10 +19,16 @@ export default async function EditSiteContentPage({
 
   async function save(formData: FormData) {
     "use server";
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("site_content")
       .update({ markdown_body: formData.get("markdown_body") as string })
       .eq("key", key);
+
+    if (error) {
+      console.error("[update site_content key]", error);
+      throw new Error(`Failed to update site_content row: ${error.message}`);
+    }
+
     revalidatePath("/");
     revalidatePath("/methodology");
     revalidatePath("/methodology/sources");

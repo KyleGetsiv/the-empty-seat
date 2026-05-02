@@ -82,7 +82,7 @@ export function QuarterlyTripsChart({ data }: { data: ChartDataPoint[] }) {
             over quarter in {latest.label}.{" "}
           </>
         )}
-        California is Waymo's largest and most closely regulated market, and the only state
+        California is Waymo&apos;s largest and most closely regulated market, and the only state
         where quarterly trip data is publicly disclosed. See the{" "}
         <a
           href="/methodology"
