@@ -156,7 +156,7 @@ export async function KeyStats() {
           </div>
 
           {/* Tile 2: Cities served */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 md:pl-12">
             <Metric
               value={citiesServed}
               explanation={
