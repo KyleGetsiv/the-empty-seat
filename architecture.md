@@ -15,9 +15,9 @@ Hard rule: keep this file under 500 lines. Consolidate when it grows past that.
 
 ## Last updated
 
-Module: 1.5b
+Module: 1.6
 Date: 2026-05-02
-Commit: 1.5b work
+Commit: 1.6 work
 
 ---
 
@@ -346,9 +346,9 @@ revalidates /methodology and /methodology/sources.
 |---------|--------|---------|-------|
 | Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled |
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
-| Slack | dev channel | SLACK_WEBHOOK_URL | production channel pending before 1.6 |
+| Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | not yet wired | ANTHROPIC_API_KEY | reserved for Phase 4 extraction |
-| Vercel Cron | live | CRON_SECRET | scraper-health daily; rotation pending before 1.6 |
+| Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
 | GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | .github/workflows/scrape-cpuc.yml, weekly Monday 13:17 UTC |
 
 ---
@@ -380,15 +380,15 @@ revalidates /methodology and /methodology/sources.
 - **Admin server action error pattern:** capture `{ error }` from Supabase
   mutations; on error, throw `Failed to <verb> <table> row: ${error.message}`
   before `revalidatePath`/`redirect`. Applied uniformly across all admin actions.
+- **Discoverability gate:** `SITE_PUBLIC=true` lifts the noindex gate; default unset.
+  `proxy.ts` adds `X-Robots-Tag: noindex, nofollow, noarchive` to every public response (skipping /admin, /auth, /api); root `generateMetadata` emits the matching `<meta>`.
 
 ---
 
 ## Known gaps and debt
 
-**Pre-1.6 blockers:**
-- Methodology contact email is `placeholder@example.com`; replace before ship.
-- Methodology TODO HTML comments (intro, estimation, changelog) need user copy.
-- CRON_SECRET rotation and production Slack channel deferred to 1.6.
+**Pre-launch:**
+- Custom domain deferred until launch; site stays on `*.vercel.app` until then.
 
 **Structural debt:**
 - **Broken delete confirm on companies/[id]:** `onSubmit={() => confirm(...) ||
@@ -491,6 +491,7 @@ scripts/
   seed-methodology-content.ts  upserts methodology_body into site_content
   update-methodology-disclosed-source.ts  prepends two-tier sourcing para to methodology_body
   fix-disclosed-row-formatting.ts         one-time fix for malformed latest_weekly_rides_disclosed row
+  update-methodology-todos.ts             one-time replacement of methodology_body TODO blocks and contact email
 
 .github/
   workflows/

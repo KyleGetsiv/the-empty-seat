@@ -30,11 +30,25 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
-  const isLoginPage = request.nextUrl.pathname === "/admin/login";
+  const path = request.nextUrl.pathname;
+  const isAdminRoute = path.startsWith("/admin");
+  const isLoginPage = path === "/admin/login";
 
   if (isAdminRoute && !isLoginPage && !user) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  // Discoverability gate: noindex header on every public response unless
+  // SITE_PUBLIC=true. Skips /admin (auth-gated), /auth (callback), /api
+  // (JSON, no consumer for the header).
+  const sitePublic = process.env.SITE_PUBLIC === "true";
+  const isPublicPath =
+    !isAdminRoute && !path.startsWith("/auth") && !path.startsWith("/api");
+  if (!sitePublic && isPublicPath) {
+    supabaseResponse.headers.set(
+      "X-Robots-Tag",
+      "noindex, nofollow, noarchive"
+    );
   }
 
   return supabaseResponse;

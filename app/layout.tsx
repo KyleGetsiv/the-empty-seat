@@ -16,11 +16,23 @@ const fraunces = Fraunces({
   axes: ["opsz", "SOFT", "WONK"],
 });
 
-export const metadata: Metadata = {
-  title: "The Empty Seat",
-  description:
-    "Research-grade tracking of Waymo's operations, unit economics, and financials.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const sitePublic = process.env.SITE_PUBLIC === "true";
+  return {
+    title: "The Empty Seat",
+    description:
+      "Research-grade tracking of Waymo's operations, unit economics, and financials.",
+    ...(sitePublic
+      ? {}
+      : {
+          robots: {
+            index: false,
+            follow: false,
+            noarchive: true,
+          },
+        }),
+  };
+}
 
 export default function RootLayout({
   children,
