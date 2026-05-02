@@ -18,7 +18,7 @@ export default async function EditFleetSnapshotPage({ params }: { params: Promis
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("fleet_snapshots").update({
+    const { error } = await supabaseAdmin.from("fleet_snapshots").update({
       company_id: formData.get("company_id") as string,
       city_id: (formData.get("city_id") as string) || null,
       snapshot_date: formData.get("snapshot_date") as string,
@@ -27,12 +27,20 @@ export default async function EditFleetSnapshotPage({ params }: { params: Promis
       source_id: (formData.get("source_id") as string) || null,
       notes: (formData.get("notes") as string) || null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update fleet_snapshots]", error);
+      throw new Error(`Failed to update fleet_snapshots row: ${error.message}`);
+    }
     redirect("/admin/fleet-snapshots");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("fleet_snapshots").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("fleet_snapshots").delete().eq("id", id);
+    if (error) {
+      console.error("[delete fleet_snapshots]", error);
+      throw new Error(`Failed to delete fleet_snapshots row: ${error.message}`);
+    }
     redirect("/admin/fleet-snapshots");
   }
 

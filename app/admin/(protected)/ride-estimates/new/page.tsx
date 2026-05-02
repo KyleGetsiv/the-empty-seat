@@ -15,7 +15,7 @@ export default async function NewRideEstimatePage() {
 
   async function create(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("ride_estimates").insert({
+    const { error } = await supabaseAdmin.from("ride_estimates").insert({
       company_id: formData.get("company_id") as string,
       city_id: (formData.get("city_id") as string) || null,
       period_start: formData.get("period_start") as string,
@@ -26,6 +26,10 @@ export default async function NewRideEstimatePage() {
       source_id: (formData.get("source_id") as string) || null,
       methodology_note: (formData.get("methodology_note") as string) || null,
     });
+    if (error) {
+      console.error("[create ride_estimates]", error);
+      throw new Error(`Failed to create ride_estimates row: ${error.message}`);
+    }
     redirect("/admin/ride-estimates");
   }
 

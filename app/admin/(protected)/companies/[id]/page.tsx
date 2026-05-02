@@ -9,18 +9,26 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("companies").update({
+    const { error } = await supabaseAdmin.from("companies").update({
       display_name: formData.get("display_name") as string,
       slug: formData.get("slug") as string,
       parent_company: (formData.get("parent_company") as string) || null,
       founded_year: formData.get("founded_year") ? Number(formData.get("founded_year")) : null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update companies]", error);
+      throw new Error(`Failed to update companies row: ${error.message}`);
+    }
     redirect("/admin/companies");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("companies").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("companies").delete().eq("id", id);
+    if (error) {
+      console.error("[delete companies]", error);
+      throw new Error(`Failed to delete companies row: ${error.message}`);
+    }
     redirect("/admin/companies");
   }
 

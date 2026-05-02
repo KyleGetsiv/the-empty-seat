@@ -15,9 +15,9 @@ Hard rule: keep this file under 500 lines. Consolidate when it grows past that.
 
 ## Last updated
 
-Module: 1.5a
+Module: 1.5b
 Date: 2026-05-02
-Commit: 1.5a work
+Commit: 1.5b work
 
 ---
 
@@ -377,9 +377,9 @@ revalidates /methodology and /methodology/sources.
   `(public)` and render content only. Homepage at root is the exception:
   outside `(public)`, calls PageShell directly. Root cause of the 1.4
   milestones nav/footer bug: this layout was missing.
-- **Admin server action error pattern:** capture `{ data, error }` from
-  Supabase calls; throw on non-null error before `revalidatePath`/`redirect`.
-  Applied to site-content actions; 16 others are still bare-await (see Known gaps).
+- **Admin server action error pattern:** capture `{ error }` from Supabase
+  mutations; on error, throw `Failed to <verb> <table> row: ${error.message}`
+  before `revalidatePath`/`redirect`. Applied uniformly across all admin actions.
 
 ---
 
@@ -391,9 +391,9 @@ revalidates /methodology and /methodology/sources.
 - CRON_SECRET rotation and production Slack channel deferred to 1.6.
 
 **Structural debt:**
-- **16 admin mutations use bare-await anti-pattern (next commit):** no
-  error check in milestones, cities, financial-periods, ride-estimates,
-  fleet-snapshots, sources/[id], companies/[id] actions.
+- **Broken delete confirm on companies/[id]:** `onSubmit={() => confirm(...) ||
+  event?.preventDefault()}` on a server-component form. `event` is undefined and
+  server forms do not register client handlers; confirm dialog never fires.
 - **site_content YAML textarea:** free-form text; collapsing the multi-line
   format to one line causes silent parser failure. Pre-fill with template
   content rather than placeholder text. Deferred.

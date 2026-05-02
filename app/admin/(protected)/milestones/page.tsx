@@ -13,7 +13,11 @@ export default async function MilestonesPage() {
     "use server";
     const id = formData.get("id") as string;
     const current = formData.get("current") === "true";
-    await supabaseAdmin.from("milestones").update({ is_published: !current }).eq("id", id);
+    const { error } = await supabaseAdmin.from("milestones").update({ is_published: !current }).eq("id", id);
+    if (error) {
+      console.error("[update milestones is_published]", error);
+      throw new Error(`Failed to update milestones row: ${error.message}`);
+    }
     revalidatePath("/admin/milestones");
     revalidatePath("/milestones");
     revalidatePath("/");

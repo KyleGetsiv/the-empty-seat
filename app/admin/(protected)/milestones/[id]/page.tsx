@@ -20,7 +20,7 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
   async function update(formData: FormData) {
     "use server";
     const tags = MILESTONE_TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
-    await supabaseAdmin.from("milestones").update({
+    const { error } = await supabaseAdmin.from("milestones").update({
       company_id: formData.get("company_id") as string,
       event_date: formData.get("event_date") as string,
       headline: formData.get("headline") as string,
@@ -30,6 +30,10 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
       kyle_annotation: (formData.get("kyle_annotation") as string) || null,
       is_published: formData.get("is_published") === "on",
     }).eq("id", id);
+    if (error) {
+      console.error("[update milestones]", error);
+      throw new Error(`Failed to update milestones row: ${error.message}`);
+    }
     revalidatePath("/milestones");
     revalidatePath("/");
     redirect("/admin/milestones");
@@ -37,7 +41,11 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("milestones").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("milestones").delete().eq("id", id);
+    if (error) {
+      console.error("[delete milestones]", error);
+      throw new Error(`Failed to delete milestones row: ${error.message}`);
+    }
     revalidatePath("/milestones");
     revalidatePath("/");
     redirect("/admin/milestones");

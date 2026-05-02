@@ -12,10 +12,12 @@ export default function NewSourcePage() {
       publisher: formData.get("publisher") as string,
       published_at: (formData.get("published_at") as string) || null,
     });
-    if (!error) {
-      revalidatePath("/methodology/sources");
-      redirect("/admin/sources");
+    if (error) {
+      console.error("[create sources]", error);
+      throw new Error(`Failed to create sources row: ${error.message}`);
     }
+    revalidatePath("/methodology/sources");
+    redirect("/admin/sources");
   }
 
   return (

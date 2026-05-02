@@ -10,19 +10,27 @@ export default async function EditSourcePage({ params }: { params: Promise<{ id:
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("sources").update({
+    const { error } = await supabaseAdmin.from("sources").update({
       url: formData.get("url") as string,
       title: formData.get("title") as string,
       publisher: formData.get("publisher") as string,
       published_at: (formData.get("published_at") as string) || null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update sources]", error);
+      throw new Error(`Failed to update sources row: ${error.message}`);
+    }
     revalidatePath("/methodology/sources");
     redirect("/admin/sources");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("sources").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("sources").delete().eq("id", id);
+    if (error) {
+      console.error("[delete sources]", error);
+      throw new Error(`Failed to delete sources row: ${error.message}`);
+    }
     revalidatePath("/methodology/sources");
     redirect("/admin/sources");
   }

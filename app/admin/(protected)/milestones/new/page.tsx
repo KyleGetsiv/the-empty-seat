@@ -17,7 +17,7 @@ export default async function NewMilestonePage() {
   async function create(formData: FormData) {
     "use server";
     const tags = MILESTONE_TAGS.filter((t) => formData.get(`tag_${t}`) === "on");
-    await supabaseAdmin.from("milestones").insert({
+    const { error } = await supabaseAdmin.from("milestones").insert({
       company_id: formData.get("company_id") as string,
       event_date: formData.get("event_date") as string,
       headline: formData.get("headline") as string,
@@ -27,6 +27,10 @@ export default async function NewMilestonePage() {
       kyle_annotation: (formData.get("kyle_annotation") as string) || null,
       is_published: formData.get("is_published") === "on",
     });
+    if (error) {
+      console.error("[create milestones]", error);
+      throw new Error(`Failed to create milestones row: ${error.message}`);
+    }
     revalidatePath("/milestones");
     revalidatePath("/");
     redirect("/admin/milestones");

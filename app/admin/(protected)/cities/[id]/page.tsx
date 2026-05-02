@@ -17,7 +17,7 @@ export default async function EditCityPage({ params }: { params: Promise<{ id: s
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("cities").update({
+    const { error } = await supabaseAdmin.from("cities").update({
       company_id: formData.get("company_id") as string,
       name: formData.get("name") as string,
       metro_area: (formData.get("metro_area") as string) || null,
@@ -30,13 +30,21 @@ export default async function EditCityPage({ params }: { params: Promise<{ id: s
       longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
       notes: (formData.get("notes") as string) || null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update cities]", error);
+      throw new Error(`Failed to update cities row: ${error.message}`);
+    }
     revalidatePath("/");
     redirect("/admin/cities");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("cities").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("cities").delete().eq("id", id);
+    if (error) {
+      console.error("[delete cities]", error);
+      throw new Error(`Failed to delete cities row: ${error.message}`);
+    }
     revalidatePath("/");
     redirect("/admin/cities");
   }

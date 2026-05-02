@@ -13,7 +13,11 @@ export default function NewCompanyPage() {
         ? Number(formData.get("founded_year"))
         : null,
     });
-    if (!error) redirect("/admin/companies");
+    if (error) {
+      console.error("[create companies]", error);
+      throw new Error(`Failed to create companies row: ${error.message}`);
+    }
+    redirect("/admin/companies");
   }
 
   return (

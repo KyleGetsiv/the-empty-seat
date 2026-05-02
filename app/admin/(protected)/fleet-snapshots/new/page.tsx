@@ -15,7 +15,7 @@ export default async function NewFleetSnapshotPage() {
 
   async function create(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("fleet_snapshots").insert({
+    const { error } = await supabaseAdmin.from("fleet_snapshots").insert({
       company_id: formData.get("company_id") as string,
       city_id: (formData.get("city_id") as string) || null,
       snapshot_date: formData.get("snapshot_date") as string,
@@ -24,6 +24,10 @@ export default async function NewFleetSnapshotPage() {
       source_id: (formData.get("source_id") as string) || null,
       notes: (formData.get("notes") as string) || null,
     });
+    if (error) {
+      console.error("[create fleet_snapshots]", error);
+      throw new Error(`Failed to create fleet_snapshots row: ${error.message}`);
+    }
     redirect("/admin/fleet-snapshots");
   }
 

@@ -12,7 +12,7 @@ export default async function NewCityPage() {
 
   async function create(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("cities").insert({
+    const { error } = await supabaseAdmin.from("cities").insert({
       company_id: formData.get("company_id") as string,
       name: formData.get("name") as string,
       metro_area: (formData.get("metro_area") as string) || null,
@@ -25,6 +25,10 @@ export default async function NewCityPage() {
       longitude: formData.get("longitude") ? Number(formData.get("longitude")) : null,
       notes: (formData.get("notes") as string) || null,
     });
+    if (error) {
+      console.error("[create cities]", error);
+      throw new Error(`Failed to create cities row: ${error.message}`);
+    }
     revalidatePath("/");
     redirect("/admin/cities");
   }

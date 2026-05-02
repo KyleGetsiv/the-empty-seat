@@ -18,7 +18,7 @@ export default async function EditRideEstimatePage({ params }: { params: Promise
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("ride_estimates").update({
+    const { error } = await supabaseAdmin.from("ride_estimates").update({
       company_id: formData.get("company_id") as string,
       city_id: (formData.get("city_id") as string) || null,
       period_start: formData.get("period_start") as string,
@@ -29,12 +29,20 @@ export default async function EditRideEstimatePage({ params }: { params: Promise
       source_id: (formData.get("source_id") as string) || null,
       methodology_note: (formData.get("methodology_note") as string) || null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update ride_estimates]", error);
+      throw new Error(`Failed to update ride_estimates row: ${error.message}`);
+    }
     redirect("/admin/ride-estimates");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("ride_estimates").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("ride_estimates").delete().eq("id", id);
+    if (error) {
+      console.error("[delete ride_estimates]", error);
+      throw new Error(`Failed to delete ride_estimates row: ${error.message}`);
+    }
     redirect("/admin/ride-estimates");
   }
 

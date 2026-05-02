@@ -17,7 +17,7 @@ export default async function EditFinancialPeriodPage({ params }: { params: Prom
 
   async function update(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("financial_periods").update({
+    const { error } = await supabaseAdmin.from("financial_periods").update({
       company_id: formData.get("company_id") as string,
       fiscal_period: formData.get("fiscal_period") as string,
       period_start: formData.get("period_start") as string,
@@ -30,12 +30,20 @@ export default async function EditFinancialPeriodPage({ params }: { params: Prom
       source_id: (formData.get("source_id") as string) || null,
       methodology_note: (formData.get("methodology_note") as string) || null,
     }).eq("id", id);
+    if (error) {
+      console.error("[update financial_periods]", error);
+      throw new Error(`Failed to update financial_periods row: ${error.message}`);
+    }
     redirect("/admin/financial-periods");
   }
 
   async function remove() {
     "use server";
-    await supabaseAdmin.from("financial_periods").delete().eq("id", id);
+    const { error } = await supabaseAdmin.from("financial_periods").delete().eq("id", id);
+    if (error) {
+      console.error("[delete financial_periods]", error);
+      throw new Error(`Failed to delete financial_periods row: ${error.message}`);
+    }
     redirect("/admin/financial-periods");
   }
 

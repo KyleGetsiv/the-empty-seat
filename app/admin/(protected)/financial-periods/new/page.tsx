@@ -14,7 +14,7 @@ export default async function NewFinancialPeriodPage() {
 
   async function create(formData: FormData) {
     "use server";
-    await supabaseAdmin.from("financial_periods").insert({
+    const { error } = await supabaseAdmin.from("financial_periods").insert({
       company_id: formData.get("company_id") as string,
       fiscal_period: formData.get("fiscal_period") as string,
       period_start: formData.get("period_start") as string,
@@ -27,6 +27,10 @@ export default async function NewFinancialPeriodPage() {
       source_id: (formData.get("source_id") as string) || null,
       methodology_note: (formData.get("methodology_note") as string) || null,
     });
+    if (error) {
+      console.error("[create financial_periods]", error);
+      throw new Error(`Failed to create financial_periods row: ${error.message}`);
+    }
     redirect("/admin/financial-periods");
   }
 
