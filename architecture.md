@@ -387,10 +387,10 @@ revalidates /methodology and /methodology/sources.
 
 ## Known gaps and debt
 
-**Pre-launch:**
-- Custom domain deferred until launch; site stays on `*.vercel.app` until then.
+**Pre-launch:** see `pre-launch.md` at repo root.
 
 **Structural debt:**
+- **Magic-link verification pending:** admin click-through against prod was deferred from 1.6 due to Supabase email rate limit; provisional based on Site URL fix.
 - **Broken delete confirm on companies/[id]:** `onSubmit={() => confirm(...) ||
   event?.preventDefault()}` on a server-component form. `event` is undefined and
   server forms do not register client handlers; confirm dialog never fires.
