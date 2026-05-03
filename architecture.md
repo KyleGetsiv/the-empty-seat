@@ -344,7 +344,7 @@ revalidates /methodology and /methodology/sources.
 
 | service | status | env vars | notes |
 |---------|--------|---------|-------|
-| Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled |
+| Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled; Site URL = prod Vercel URL, Redirect URLs include localhost wildcard for dev magic links; local dev currently needs email host swap, fix via `emailRedirectTo` deferred |
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | not yet wired | ANTHROPIC_API_KEY | reserved for Phase 4 extraction |
