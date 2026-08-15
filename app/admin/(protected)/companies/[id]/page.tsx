@@ -15,6 +15,9 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
       slug: formData.get("slug") as string,
       parent_company: (formData.get("parent_company") as string) || null,
       founded_year: formData.get("founded_year") ? Number(formData.get("founded_year")) : null,
+      hq_country: (formData.get("hq_country") as string) || null,
+      ownership: (formData.get("ownership") as string) || null,
+      status_summary: (formData.get("status_summary") as string) || null,
     }).eq("id", id);
     if (error) {
       console.error("[update companies]", error);
@@ -57,6 +60,20 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Founded year</label>
           <input name="founded_year" type="number" defaultValue={company.founded_year ?? ""} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">HQ country</label>
+            <input name="hq_country" placeholder="US" defaultValue={company.hq_country ?? ""} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ownership</label>
+            <input name="ownership" placeholder="Nasdaq: PONY" defaultValue={company.ownership ?? ""} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status summary (one editorial sentence)</label>
+          <textarea name="status_summary" rows={2} defaultValue={company.status_summary ?? ""} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
         </div>
         <div className="flex gap-3 pt-2">
           <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Save</button>

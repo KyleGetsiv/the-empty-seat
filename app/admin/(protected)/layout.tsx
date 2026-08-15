@@ -13,6 +13,8 @@ const navItems = [
   { label: "Financial Periods", href: "/admin/financial-periods" },
   { label: "Sources", href: "/admin/sources" },
   { label: "Companies", href: "/admin/companies" },
+  { label: "Programs", href: "/admin/programs" },
+  { label: "Snapshots", href: "/admin/snapshots" },
   { label: "Site Content", href: "/admin/site-content" },
 ];
 

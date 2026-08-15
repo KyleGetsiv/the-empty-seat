@@ -60,6 +60,7 @@ export type Database = {
           metro_area: string | null
           name: string
           notes: string | null
+          program_id: string | null
           public_access_date: string | null
           service_area_sq_mi: number | null
           status: string
@@ -77,6 +78,7 @@ export type Database = {
           metro_area?: string | null
           name: string
           notes?: string | null
+          program_id?: string | null
           public_access_date?: string | null
           service_area_sq_mi?: number | null
           status: string
@@ -94,6 +96,7 @@ export type Database = {
           metro_area?: string | null
           name?: string
           notes?: string | null
+          program_id?: string | null
           public_access_date?: string | null
           service_area_sq_mi?: number | null
           status?: string
@@ -107,6 +110,13 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "cities_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "operator_programs"
+            referencedColumns: ["id"]
+          },
         ]
       }
       companies: {
@@ -114,30 +124,114 @@ export type Database = {
           created_at: string
           display_name: string
           founded_year: number | null
+          hq_country: string | null
           id: string
+          ownership: string | null
           parent_company: string | null
           slug: string
+          status_summary: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           display_name: string
           founded_year?: number | null
+          hq_country?: string | null
           id?: string
+          ownership?: string | null
           parent_company?: string | null
           slug: string
+          status_summary?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           display_name?: string
           founded_year?: number | null
+          hq_country?: string | null
           id?: string
+          ownership?: string | null
           parent_company?: string | null
           slug?: string
+          status_summary?: string | null
           updated_at?: string
         }
         Relationships: []
+      }
+      competitor_snapshots: {
+        Row: {
+          autonomous_miles_cumulative: number | null
+          cities_operating_total: number | null
+          cities_serving_public: number | null
+          created_at: string
+          cumulative_rides: number | null
+          disclosure_quality: string
+          funding_total_usd: number | null
+          id: string
+          implied_valuation_usd: number | null
+          notes: string | null
+          program_id: string
+          snapshot_date: string
+          source_id: string | null
+          supervision: string | null
+          updated_at: string
+          vehicle_count: number | null
+          weekly_rides: number | null
+        }
+        Insert: {
+          autonomous_miles_cumulative?: number | null
+          cities_operating_total?: number | null
+          cities_serving_public?: number | null
+          created_at?: string
+          cumulative_rides?: number | null
+          disclosure_quality?: string
+          funding_total_usd?: number | null
+          id?: string
+          implied_valuation_usd?: number | null
+          notes?: string | null
+          program_id: string
+          snapshot_date: string
+          source_id?: string | null
+          supervision?: string | null
+          updated_at?: string
+          vehicle_count?: number | null
+          weekly_rides?: number | null
+        }
+        Update: {
+          autonomous_miles_cumulative?: number | null
+          cities_operating_total?: number | null
+          cities_serving_public?: number | null
+          created_at?: string
+          cumulative_rides?: number | null
+          disclosure_quality?: string
+          funding_total_usd?: number | null
+          id?: string
+          implied_valuation_usd?: number | null
+          notes?: string | null
+          program_id?: string
+          snapshot_date?: string
+          source_id?: string | null
+          supervision?: string | null
+          updated_at?: string
+          vehicle_count?: number | null
+          weekly_rides?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "competitor_snapshots_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "operator_programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "competitor_snapshots_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       disclosed_metrics: {
         Row: {
@@ -376,6 +470,80 @@ export type Database = {
             columns: ["source_id"]
             isOneToOne: false
             referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_program_roles: {
+        Row: {
+          company_id: string
+          program_id: string
+          role: string
+        }
+        Insert: {
+          company_id: string
+          program_id: string
+          role: string
+        }
+        Update: {
+          company_id?: string
+          program_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_program_roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_program_roles_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "operator_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_programs: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          lead_company_id: string
+          slug: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          lead_company_id: string
+          slug: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          lead_company_id?: string
+          slug?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_programs_lead_company_id_fkey"
+            columns: ["lead_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

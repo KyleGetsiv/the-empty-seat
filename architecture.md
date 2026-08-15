@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 2.6
+Module: 3.1
 Date: 2026-08-15
-Commit: 2.6 work
+Commit: 3.1 work
 
 ---
 
@@ -21,10 +21,37 @@ Commit: 2.6 work
 ### Tables
 
 #### companies
-Reference table. Six rows seeded: Waymo plus five competitors. Columns:
-`id` (pk), `slug` (unique), `display_name`, `founded_year` (nullable),
-`parent_company` (nullable), `created_at`, `updated_at`. Public frontend
-is Waymo-only; competitor rows exist for future comparative data.
+Reference table, 13 rows after 3.1 (Waymo, Zoox, Tesla, Nuro, Lucid,
+Uber, Avride, May Mobility, Motional, Pony.ai, WeRide, Baidu Apollo Go,
+Didi). Columns: `id` (pk), `slug` (unique), `display_name`,
+`founded_year`, `parent_company`, `hq_country`, `ownership`,
+`status_summary` (one admin-maintained sentence; the last three added
+0010), `created_at`, `updated_at`.
+
+#### operator_programs, operator_program_roles (0010)
+A program is the unit on the landscape page: the thing actually on the
+road. `operator_programs`: `id` (pk), `slug` (unique), `display_name`,
+`lead_company_id` (fk), `summary`, `is_active`, timestamps. Roles join
+(composite pk program_id, company_id, role; role in 'av_developer' |
+'vehicle_platform' | 'fleet_operator' | 'network'; no audit trigger per
+the composite-pk limitation, acceptable for a pure join table). Single-
+company programs hold all roles; Uber's premium program is Nuro
+(av_developer) + Lucid (vehicle_platform) + Uber (fleet_operator,
+network); Uber also holds 'network' on Waymo One, Apollo Go, Pony,
+WeRide, Avride, May Mobility, Motional. 11 programs seeded by
+`scripts/seed-operator-programs.ts`.
+
+#### competitor_snapshots (0010)
+Point-in-time operational readings per program; unique (program_id,
+snapshot_date). All metric columns nullable by design: `cities_serving_
+public`, `cities_operating_total`, `vehicle_count`, `weekly_rides`,
+`cumulative_rides`, `autonomous_miles_cumulative`, `funding_total_usd`,
+`implied_valuation_usd`. `supervision` check: 'driverless' |
+'safety_operator' | 'mixed' | 'human_is_legal_driver' (the last exists
+for Tesla's Bay Area TCP operation). `disclosure_quality` check:
+'regulatory' | 'company_disclosed' | 'earnings_disclosed' |
+'press_reported' | 'estimated'. `source_id`, `notes`, timestamps; audit
+and updated_at triggers. Populated in 3.2.
 
 #### sources
 Every primary source linked to a data point; scrapers and admins both
@@ -39,28 +66,16 @@ for a market. `status` check (0009): 'announced', 'waitlist', 'employee',
 employee-only riders ahead of public access. As of 2.4 the Waymo roster
 is 18 rows: 8 public, 2 waitlist, 4 employee, 3 announced (no launch
 date, so hidden from timeline/map), plus Bay Area naming note.
-`service_area_geojson` is reserved; the map derives circles from
-`service_area_sq_mi` only. `external_keys` is populated lazily by
-scrapers (empty `{}` by default).
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| company_id | uuid | fk companies |
-| name | text | unique with company_id (constraint 0004) |
-| metro_area | text | nullable |
-| country | text | default 'US' |
-| launch_date | date | nullable |
-| public_access_date | date | nullable |
-| service_area_sq_mi | numeric | nullable |
-| status | text | check constraint |
-| latitude | numeric | nullable |
-| longitude | numeric | nullable |
-| notes | text | nullable |
-| service_area_geojson | jsonb | nullable, added 0005, unused by map |
-| external_keys | jsonb | NOT NULL default '{}', added 0006 |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+`program_id` (nullable fk operator_programs, 0010) links competitor
+cities to their program; Waymo rows leave it null. `service_area_geojson`
+is reserved; the map derives circles from `service_area_sq_mi` only.
+`external_keys` is populated lazily by scrapers (empty `{}` by default).
+Columns: `id` (pk), `company_id` (fk), `name` (unique with company_id,
+0004), `metro_area`, `country` (default 'US'), `launch_date`,
+`public_access_date`, `service_area_sq_mi`, `status`, `latitude`,
+`longitude`, `notes`, `service_area_geojson` (jsonb, 0005),
+`external_keys` (jsonb not null default '{}', 0006), `program_id`
+(0010), `created_at`, `updated_at`.
 
 #### milestones
 Dated events in Waymo's history; drafts (`is_published = false`) are
@@ -108,15 +123,9 @@ triggers attached. Seeded with Waymo's verified disclosure arc by
 Global 450K investor figure, 4 cumulative_trips, 3 fleet_size).
 
 #### site_content
-Key/value store for admin-editable editorial copy. Uses `key text` as
-primary key (not UUID); audit trigger is omitted for this reason (see
-CLAUDE.md audit trigger limitation note). `updated_at` tracks changes.
-
-| column | type | notes |
-|--------|------|-------|
-| key | text | pk, e.g. 'thesis_paragraphs' |
-| markdown_body | text | |
-| updated_at | timestamptz | |
+Key/value store for admin-editable editorial copy: `key` (text pk, e.g.
+'thesis_paragraphs'), `markdown_body`, `updated_at`. No audit trigger
+(text pk; see CLAUDE.md audit trigger limitation).
 
 #### audit_log
 Append-only log written by `audit_trigger_fn()`. Admin-read only via
@@ -127,32 +136,30 @@ nullable), `after` (jsonb, nullable), `created_at`.
 
 ### Cross-cutting schema notes
 
-- **RLS model:** public SELECT open on all tables except `milestones`
-  (published only for anon) and `audit_log` (admin only). All writes
-  require an authenticated user passing `is_admin()`.
-- **is_admin():** SQL function in `0001`. Reads
-  `app_metadata.is_admin` from the Supabase JWT. Set via service-role
-  client or dashboard.
-- **Audit triggers:** `audit_trigger_fn()` fires on companies, sources,
-  cities, milestones, fleet_snapshots, ride_estimates, financial_periods.
-  Not on `site_content` (text PK, not UUID) or `audit_log` itself.
+- **RLS model:** public SELECT on all tables except `milestones`
+  (published only for anon) and `audit_log` (admin only); writes require
+  `is_admin()` (SQL fn in 0001 reading `app_metadata.is_admin` from the
+  JWT; set via service-role client or dashboard).
+- **Audit triggers:** `audit_trigger_fn()` on every UUID-pk table
+  (companies, sources, cities, milestones, fleet_snapshots,
+  ride_estimates, financial_periods, disclosed_metrics, operator_programs,
+  competitor_snapshots). Not on `site_content` (text pk),
+  `operator_program_roles` (composite pk), or `audit_log`.
 - **updated_at triggers:** companies, cities, milestones,
-  financial_periods, site_content.
-- **Disclosed metrics convention (v2, module 2.3):** point-in-time public
-  disclosures live in the `disclosed_metrics` table, one row per
-  (company, metric, as_of). `attribution` separates company-confirmed
-  rows from third-party ones; headline surfaces use company rows only,
-  charts render company rows as filled dots and third-party as open dots.
-  The old `site_content` `latest_*_disclosed` text convention is retired
-  (row deleted by `scripts/seed-disclosed-metrics.ts`).
+  financial_periods, site_content, disclosed_metrics, operator_programs,
+  competitor_snapshots.
+- **Disclosed metrics convention (2.3):** point-in-time disclosures in
+  `disclosed_metrics`; `attribution` separates company-confirmed from
+  third-party; headline surfaces use company rows only, charts render
+  filled vs open dots. The `site_content` `latest_*_disclosed` text
+  convention is retired.
 - **external_keys convention:** cities.external_keys is a jsonb map from
-  source slug to that source's city identifier. Keys: `"robotaxi_tracker"`,
-  `"nhtsa"`, etc. Populated lazily; scrapers write their key when first run.
-  All 11 Waymo cities ship with empty `{}`.
+  source slug to that source's city id; populated lazily by scrapers.
 - **Migration history:** 0001 initial; 0002 site_content; 0003 drop
   site_content trigger; 0004 cities unique (company_id, name); 0005
   service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
-  0008 disclosed_metrics; 0009 cities 'employee' status.
+  0008 disclosed_metrics; 0009 cities 'employee' status; 0010
+  operator programs, roles, competitor_snapshots, companies fields.
 
 ---
 
@@ -192,6 +199,8 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/site-content | list + create new key form | insert | /admin/site-content/[key] |
 | /admin/site-content/[key] | edit | upsert | / |
 | /admin/disclosed-metrics | full CRUD, attribution badges | insert, update, delete | / |
+| /admin/programs | operator programs CRUD with role matrix (company x role checkboxes; roles replaced wholesale on save) | insert, update, delete | /landscape |
+| /admin/snapshots | competitor snapshots CRUD, quality badges | insert, update, delete | /landscape |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
 | /api/cron/scraper-health | daily CPUC freshness report to Slack (quarters in DB, pending, overdue) | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
@@ -206,17 +215,13 @@ also revalidates /methodology/sources; site-content revalidates
 
 ### components/sections/
 
-- **PageShell:** async server component; sticky nav and footer. Calls
-  `getGlobalLastUpdated()` and renders "Last updated: Month D, YYYY" in
-  footer. Methodology is in desktop nav with `opacity-70` (meta-link).
-  `scroll-behavior: smooth` handles scroll animation globally.
-- **ThesisHero:** full-viewport hero with animated ride count. Prefers
-  `getLatestDisclosedWeeklyRides()` over CPUC; caption reads "WEEKLY RIDES,
-  AS OF [date]" or "ESTIMATED WEEKLY RIDES" accordingly. Pending state
-  (large serif paragraph) when both null. Counter animation via Framer Motion
-  in ThesisHeroCounter (client).
-- **Thesis:** fetches `thesis_paragraphs` from `site_content` via
-  `getSiteContent`, renders markdown. Returns null if key absent.
+- **PageShell:** async server component; sticky nav and footer with
+  "Last updated" from `getGlobalLastUpdated()`. Methodology as meta-link.
+- **ThesisHero:** hero with animated ride count (ThesisHeroCounter,
+  client, Framer Motion). Prefers `getLatestDisclosedWeeklyRides()` over
+  CPUC; caption reflects which. Serif pending state when both null.
+- **Thesis:** renders `thesis_paragraphs` from `site_content`; null if
+  absent.
 - **KeyStats:** 4-tile band. Tile 1 prefers disclosed worldwide rides
   (`getLatestDisclosedWeeklyRides()`), CPUC fallback with derived label.
   Tile 2 cities count. Tiles 3/4 CPUC trips and miles scoped (2.2) to the
@@ -229,21 +234,18 @@ also revalidates /methodology/sources; site-content revalidates
   between KeyStats and Operations. Fetches the weekly_rides disclosure
   series and renders DisclosedRidesChart with framing copy and a footnote
   naming the latest company figure and the 1M target source.
-- **RecentMilestones:** server component. Fetches 5 most recent published
-  milestones. Renders MilestoneCard list with "View all" link. Returns
-  null if no published milestones. Section id="milestones".
+- **RecentMilestones:** 5 most recent published milestones as
+  MilestoneCards with "View all" link; null if none. id="milestones".
 
 ### components/ui/
 
 - **Container, Prose, Heading, Button, Card:** design system primitives.
-- **Tooltip:** Radix UI wrapper, 8s auto-dismiss, mobile tap-to-reveal.
-- **Metric:** numeric value with info icon; tooltip shows explanation,
-  source, as-of date.
-- **Term:** dotted underline; tooltip shows glossary entry by key.
-- **MarkdownBody:** react-markdown + remark-gfm + rehype-raw. Full
-  markdown support (headings, lists, tables, blockquotes, code). HTML
-  comments pass through as real HTML comments (invisible to readers).
-  Admin-authored content only; rehype-raw is safe in this context.
+- **Tooltip** (Radix, 8s auto-dismiss, mobile tap); **Metric** (value +
+  info icon, tooltip with explanation/source/as-of); **Term** (dotted
+  underline, glossary lookup by key).
+- **MarkdownBody:** react-markdown + remark-gfm + rehype-raw; HTML
+  comments pass through invisibly. Admin-authored content only, so
+  rehype-raw is safe here.
 
 ### components/charts/
 
@@ -279,13 +281,10 @@ also revalidates /methodology/sources; site-content revalidates
   complete year, derived from data (2.2); grow/decline verb matches sign.
   Footnote derives next quarter's CPUC due date from lib/cpuc-calendar.
   Pending state when data array is empty.
-- **CoverageMap (client):** Mapbox GL JS, lazy-loaded via
-  CoverageMapClient wrapper (ssr: false). GeoJSON polygon circles for
-  cities with sq_mi; fixed 8px pins for cities without. Waitlist
-  styling: dashed outline, reduced fill opacity. Hover popups via
-  Mapbox Popup. Style overrides on load to match editorial palette.
-- **CoverageMapClient:** `"use client"` dynamic import wrapper. Renders
-  a pulsing skeleton while Mapbox loads.
+- **CoverageMap (client):** Mapbox GL JS via CoverageMapClient (dynamic
+  import, ssr: false, pulsing skeleton). Circle polygons for cities with
+  sq_mi, 8px pins otherwise; non-public styling dashed/reduced; hover
+  popups; editorial palette overrides on load.
 
 ---
 
@@ -391,7 +390,7 @@ placeholder health cron, year-scoping bug, hardcoded filing dates, stray
 500K row deleted, badge collapse, delete-confirm (ConfirmDeleteButton on
 all 8 admin delete forms), revalidatePath on all mutations. Supabase
 auto-pause resumed and repo made public 2026-08-15. PENDING USER:
-regenerate lib/supabase/types.ts
+regenerate lib/supabase/types.ts after 0010 is pushed
 (`supabase gen types typescript --linked > lib/supabase/types.ts`) and
 the magic-link prod retest deferred since 1.6.
 
@@ -417,16 +416,15 @@ the magic-link prod retest deferred since 1.6.
 - Quantitative series are CA-only until 2.3 (national disclosed metrics)
   lands; pre-2025 CPUC baseline deferred to Phase 4.
 - CPUC incident_metrics not ingested; safety-phase territory.
-- lib/supabase/types.ts manually patched for 0006, 0007, 0008; regenerate
-  with `supabase gen types typescript` in 2.6.
+- lib/supabase/types.ts manually patched for 0006 through 0010; regenerate
+  with `supabase gen types typescript` (pending user).
 
 ---
 
 ## Parking lot
 
-- State-level fill on coverage map (US states colored by Waymo stage). Deferred 1.2.c.
-- Robotaxi Tracker as corroborating signal (landscape phase); pre-2025 CPUC
-  baseline via cpuc.ca.gov extraction (Phase 4, overlaps SEC EDGAR).
+- State-level fill on coverage map (deferred 1.2.c); Robotaxi Tracker as
+  corroborating signal (landscape); pre-2025 CPUC baseline (Phase 4).
 
 ---
 
@@ -452,7 +450,7 @@ app/
       layout.tsx               session auth gate
       cities/ companies/ milestones/ sources/ fleet-snapshots/
       ride-estimates/ financial-periods/ disclosed-metrics/
-                                 full CRUD (list, new, [id]);
+      programs/ snapshots/       full CRUD (list, new, [id]);
                                  milestones adds publish toggle
       site-content/            list + [key] edit
   api/
@@ -483,15 +481,15 @@ lib/
   supabase/                    server.ts, admin.ts, browser.ts, types.ts
 
 supabase/
-  migrations/                  0001 through 0009
+  migrations/                  0001 through 0010
   seed.sql                     6 company rows only
 
 scripts/
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
   test-cpuc-parser.ts          fixture tests for scraper parse and calendar
-  seed-*.ts, update-*.ts, fix-*.ts   one-time seed and content-fix scripts
-                               (cities, milestones, methodology, site_content,
-                               stray ride row)
+  seed-*.ts, update-*.ts, fix-*.ts   idempotent seed and fix scripts
+                               (cities, milestones, disclosed metrics,
+                               operator programs, methodology, site_content)
 
 .github/
   workflows/

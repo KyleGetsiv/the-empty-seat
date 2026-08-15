@@ -47,6 +47,20 @@ export default function NewCompanyPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Founded year</label>
           <input name="founded_year" type="number" min="1900" max="2100" className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">HQ country</label>
+            <input name="hq_country" placeholder="US" className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ownership</label>
+            <input name="ownership" placeholder="Nasdaq: PONY" className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status summary (one editorial sentence)</label>
+          <textarea name="status_summary" rows={2} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+        </div>
         <div className="flex gap-3 pt-2">
           <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
             Create

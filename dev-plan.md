@@ -105,9 +105,17 @@ Research summary compiled 2026-08-15 from primary and secondary sources. This se
 - Didi: 24/7 driverless trials Guangzhou/Beijing, R2 vehicle 2026, UAE pilot announced; no meaningful disclosures yet.
 - Market frame: Goldman ~500K robotaxis in China by 2030, ~$47B China market by 2035 (headline-level verification only).
 
+### Nuro + Lucid + Uber (elevated to first-class operator, decision 2026-08-15)
+
+- Structure: Nuro supplies the L4 Nuro Driver; Lucid supplies the Gravity SUV platform (later a sub-$50K "Midsize" platform); Uber owns and operates the fleet and runs the network. The only Uber AV program where Uber owns the vehicles. Uber has invested $500M in Lucid (~11.5% stake) and roughly $500M committed to Nuro (Reuters, milestone-based); vehicle commitment raised to at least 35,000 (10K Gravity + 25K Midsize) on 2026-04-14.
+- Status: ~100 Gravity engineering vehicles testing autonomously with safety operators in the SF Bay Area (since Dec 2025) and Houston (confirmed 2026-06-17). Uber employees hailing them via the Uber app since 2026-04-13. No public rides, no fares. Driverless testing not yet begun as of June reporting. Production Gravity units began shipping from Lucid's Arizona plant July 2026. Lucid (2026-08-04) and Uber (2026-08-05) both reiterated a late-2026 Bay Area launch; Houston mid-2027 with a 50K sq ft depot.
+- Regulatory: CA DMV driverless testing permit adds Gravity (April 2026; Santa Clara and San Mateo counties, up to 45 mph, NOT San Francisco proper); CPUC Drivered Pilot permit 2026-05-08 (passengers with safety driver, no fares); 47 vehicles registered in Texas. Will appear in CPUC Pilot Program quarterly filings from Q2 2026, joining Zoox in the site's regulatory comparison frame. Still needs CPUC driverless/deployment and DMV passenger deployment permits before charging fares.
+- Disclosed metrics: fleet ~100 (unchanged since March 2026); no miles or ride counts disclosed. Nuro: $203M Series E at $6B (Aug 2025), pivoted from delivery to licensing Sept 2024, co-CEOs Zhu and Ferguson.
+- What the sensor-halo Lucid SUVs seen around SF with a driver are: this engineering fleet, in autonomous mode with a safety operator, day and night.
+
 ### Other US operators (for landscape completeness)
 
-- Avride: commercial in Dallas on Uber app since Dec 2025, safety operator onboard. May Mobility: driver-out low-speed service Atlanta metro; Arlington TX on Uber. Motional: supervised Las Vegas pilot on Uber, driverless targeted end-2026. Nuro+Lucid+Uber: pre-launch (Bay Area testing; Houston targeted mid-2027). Cruise: still dead (shut down Dec 2024). Uber is the common rail for nearly every non-Waymo operator; Lyft has Waymo (Nashville) and Freenow/Baidu in Europe.
+- Avride: commercial in Dallas on Uber app since Dec 2025, safety operator onboard. May Mobility: driver-out low-speed service Atlanta metro; Arlington TX on Uber. Motional: supervised Las Vegas pilot on Uber, driverless targeted end-2026. Cruise: still dead (shut down Dec 2024). Uber is the common rail for nearly every non-Waymo operator (30+ AV partnerships, AV live in 7 cities, 15 targeted by end-2026, "hundreds of thousands" of AV trips per week per the Q2 2026 call); Lyft has Waymo (Nashville) and Freenow/Baidu in Europe.
 
 ### Alphabet financials (for Phase 4)
 
@@ -241,16 +249,17 @@ competitor_snapshots
 ```
 
 - Every column nullable by design (principle 7: sparse data is normal). `disclosure_quality` implements principle 9 at the schema level.
-- Extend `companies` with `hq_country text`, `ownership text` (e.g., 'Amazon subsidiary', 'Nasdaq: PONY'), `status_summary text` (one editorial sentence, admin-maintained). Companies table currently has 6 rows; add rows for operators now relevant: Avride, May Mobility, Motional, Nuro, Didi (surface the final roster for approval).
-- The `cities` table already supports non-Waymo rows via `company_id`. Enter competitor cities (Zoox Las Vegas/SF/Austin, Tesla's seven metros, Apollo Go Dubai, WeRide Abu Dhabi/Dubai, Pony Zagreb, etc.) with correct statuses; the Waymo-only queries on existing pages already filter by company and are unaffected (verify).
-- Admin CRUD for `competitor_snapshots` following the existing admin page pattern.
+- **Operator roles (added 2026-08-15 for Nuro/Lucid/Uber).** A "deployment" is not always one company. Nuro (driver), Lucid (vehicle), and Uber (fleet owner and network) jointly form one operator; Waymo rides in Austin run on Uber's network; Apollo Go rides in Dubai run on Uber's app. Model this with an `operator_programs` table (one row per deployment program, e.g. 'Uber premium robotaxi', 'Waymo One', 'Zoox') and an `operator_program_roles` join (program_id, company_id, role in 'av_developer' | 'vehicle_platform' | 'fleet_operator' | 'network'). `competitor_snapshots` and competitor `cities` rows key on the program, not the company, so the landscape table has one row per thing-on-the-road. Single-company programs (Waymo, Zoox, Tesla, Apollo Go) simply hold all roles. Show the SQL for approval; this supersedes the company-only shape above.
+- Extend `companies` with `hq_country text`, `ownership text` (e.g., 'Amazon subsidiary', 'Nasdaq: PONY'), `status_summary text` (one editorial sentence, admin-maintained). Add company rows: Nuro, Lucid, Uber, Avride, May Mobility, Motional, Didi (decision 2026-08-15: include the minor operators; rows are cheap and the table filters).
+- The `cities` table already supports non-Waymo rows via `company_id`; add a nullable `program_id` for the same reason. Enter competitor cities (Zoox Las Vegas/SF/Austin, Tesla's seven metros, Nuro/Lucid/Uber Bay Area and Houston, Apollo Go Dubai, WeRide Abu Dhabi/Dubai, Pony Zagreb, etc.) with correct statuses; the Waymo-only queries on existing pages already filter by company and are unaffected (verify).
+- Admin CRUD for programs, roles, and `competitor_snapshots` following the existing admin page pattern.
 
 **Acceptance**: migration reviewed and applied; admin can enter a full competitor snapshot with source; existing Waymo pages unaffected (verified in browser).
 
 ### 3.2 Sourced data entry
 
 **Do**:
-- Enter initial snapshots for Waymo, Zoox, Tesla, Baidu Apollo Go, Pony.ai, WeRide (and the minor US operators if the roster decision includes them), using the State of the world briefing as the checklist but re-verifying each figure against its primary source at entry time. UNVERIFIED items stay out.
+- Enter initial snapshots for Waymo, Zoox, Tesla, Nuro/Lucid/Uber, Baidu Apollo Go, Pony.ai, WeRide, plus the minor US operators, using the State of the world briefing as the checklist but re-verifying each figure against its primary source at entry time. UNVERIFIED items stay out.
 - Timing note: Baidu and Pony.ai report Q2 2026 earnings on 2026-08-18. If this module runs after that date, use the fresh numbers.
 - Every snapshot row carries `disclosure_quality` honestly: Tesla's "7 metros" is company_disclosed; its ~21-car unsupervised fleet is press_reported (derived from Tesla's own chart by analysts); Waymo CPUC trips are regulatory.
 
@@ -271,12 +280,12 @@ competitor_snapshots
 
 **Acceptance**: page renders with real entered data; sparse cells degrade gracefully; mobile responsive; nav link live; browser-verified.
 
-### 3.4 Disclosed-data comparison: Waymo vs. Zoox (CPUC)
+### 3.4 Disclosed-data comparison: Waymo vs. Zoox (and Nuro) via CPUC
 
-**Background**: v1 planned a Waymo vs. Tesla disclosed-data comparison and told us to re-investigate at planning time. Investigated: Tesla still files no California AV data (TCP permit, not an AV deployment permit), so no honest disclosed-data comparison with Tesla exists. Zoox, however, files in the CPUC Pilot Program: same regulator, same cadence as the site's primary Waymo source.
+**Background**: v1 planned a Waymo vs. Tesla disclosed-data comparison and told us to re-investigate at planning time. Investigated: Tesla still files no California AV data (TCP permit, not an AV deployment permit), so no honest disclosed-data comparison with Tesla exists. Zoox files in the CPUC Pilot Program, and Nuro joins it from Q2 2026 (Drivered Pilot permit 2026-05-08): same regulator, same cadence as the site's primary Waymo source. Confirmed in 2.2 that CPUC's pilot zips (`av-pilot-YYYYqQ.zip`) use the same CSV layout as the deployment zips, so the 2.2 parser applies.
 
 **Do**:
-- Extend `lib/scrapers/cpuc.ts` (or a sibling) to ingest Zoox Pilot Program quarterly data if the mirror or CPUC publishes it in parseable form; otherwise manual quarterly entry with source rows. Investigate actual data availability first and surface findings before building.
+- Extend `lib/scrapers/cpuc.ts` to also fetch the Pilot Program zip each quarter and ingest per-carrier monthly rollups for Zoox and Nuro (and Waymo's own pilot-tier data if present) into `ride_estimates` keyed by program, `confidence 'high'`, with a methodology note distinguishing pilot from deployment tiers.
 - Build a modest comparison chart on the landscape page: Waymo deployment trips vs. Zoox pilot trips, CA only, log scale or dual annotation (the gap is orders of magnitude; the chart's honesty about that gap is the point).
 - Tesla gets a prose treatment instead: a short sourced sidebar on why Tesla does not appear in disclosed-data comparisons (no CPUC AV filings; the CPUC "is the driver" statement). This is more credible than a mixed-confidence chart, and more interesting.
 
@@ -386,7 +395,7 @@ Open (surface before or during the named module):
 
 1. **City status enum** for employee-only driverless markets (2.4): new status value vs. mapping. Recommendation: new 'employee' value.
 2. **Announced-cities inclusion policy** (2.4): full announced list vs. only dated/operating markets. Recommendation: only dated/operating.
-3. **Operator roster** for companies table additions (3.1): majors only vs. including Avride/May Mobility/Motional/Nuro/Didi. Recommendation: include; rows are cheap, the table filters.
+3. ~~Operator roster~~ Decided 2026-08-15: include minor operators; Nuro/Lucid/Uber elevated to first-class with role modeling (see 3.1).
 4. **Landscape map approach** (3.3): extend CoverageMap vs. separate lighter component.
 5. **Extraction model** (4.4): current Anthropic lineup choice to replace the pinned April 2026 Sonnet string; also whether extraction cost ceiling matters (expected low; Alphabet publishes ~8 documents/quarter).
 6. **Transcript source** (4.3): Motley Fool accessibility re-check; fallback selection if blocked.
@@ -404,7 +413,7 @@ Working agreement carried over from `CLAUDE.md` unchanged: module by module, no 
 | Phase | Scope | Effort (weekends) | Public ship |
 |---|---|---|---|
 | 2 | Re-entry and freshness | 2-3 | Deploy only |
-| 3 | Competitive landscape | 2-3 | Deploy only |
+| 3 | Competitive landscape | 3-4 | Deploy only |
 | 4 | Financials + extraction engine | 4-5 | Deploy only |
 | 5 | Launch | 1 | Announcement |
 | 6 | Unit economics | 3 | Yes |
