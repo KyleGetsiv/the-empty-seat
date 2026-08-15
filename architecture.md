@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 3.1
+Module: 3.2
 Date: 2026-08-15
-Commit: 3.1 work
+Commit: 3.2 work
 
 ---
 
@@ -51,7 +51,9 @@ public`, `cities_operating_total`, `vehicle_count`, `weekly_rides`,
 for Tesla's Bay Area TCP operation). `disclosure_quality` check:
 'regulatory' | 'company_disclosed' | 'earnings_disclosed' |
 'press_reported' | 'estimated'. `source_id`, `notes`, timestamps; audit
-and updated_at triggers. Populated in 3.2.
+and updated_at triggers. Seeded 3.2 with one row per program (11) by
+`scripts/seed-competitor-snapshots.ts`; Apollo Go and Pony rows are Q1
+2026 and need a Q2 refresh after their 2026-08-18 earnings.
 
 #### sources
 Every primary source linked to a data point; scrapers and admins both
@@ -67,7 +69,10 @@ employee-only riders ahead of public access. As of 2.4 the Waymo roster
 is 18 rows: 8 public, 2 waitlist, 4 employee, 3 announced (no launch
 date, so hidden from timeline/map), plus Bay Area naming note.
 `program_id` (nullable fk operator_programs, 0010) links competitor
-cities to their program; Waymo rows leave it null. `service_area_geojson`
+cities to their program; Waymo rows leave it null. 30 competitor city
+rows seeded in 3.2 (Zoox, Tesla, Nuro/Lucid/Uber, Apollo Go, Pony,
+WeRide, Avride, May, Motional). Waymo-only pages filter by Waymo's
+company_id and are unaffected. `service_area_geojson`
 is reserved; the map derives circles from `service_area_sq_mi` only.
 `external_keys` is populated lazily by scrapers (empty `{}` by default).
 Columns: `id` (pk), `company_id` (fk), `name` (unique with company_id,
@@ -372,11 +377,12 @@ also revalidates /methodology/sources; site-content revalidates
   `(public)` routes in PageShell; new public pages render content only.
   Homepage at root is the exception (calls PageShell directly). The 1.4
   milestones nav/footer bug came from this layout missing.
-- **Admin server action error pattern:** capture `{ error }` from Supabase
-  mutations; on error, throw `Failed to <verb> <table> row: ${error.message}`
-  before `revalidatePath`/`redirect`. Applied uniformly across all admin actions.
-- **Discoverability gate:** `SITE_PUBLIC=true` lifts the noindex gate; default unset.
-  `proxy.ts` adds `X-Robots-Tag: noindex, nofollow, noarchive` to every public response (skipping /admin, /auth, /api); root `generateMetadata` emits the matching `<meta>`.
+- **Admin server action error pattern:** capture `{ error }`; on error
+  throw `Failed to <verb> <table> row: ${error.message}` before
+  `revalidatePath`/`redirect`. Uniform across all admin actions.
+- **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; default
+  unset. `proxy.ts` sets `X-Robots-Tag: noindex, nofollow, noarchive` on
+  public responses; root `generateMetadata` emits the matching `<meta>`.
 
 ---
 
@@ -395,24 +401,17 @@ regenerate lib/supabase/types.ts after 0010 is pushed
 the magic-link prod retest deferred since 1.6.
 
 **Structural debt:**
-- **Magic-link verification pending:** admin click-through against prod was deferred from 1.6 due to Supabase email rate limit; provisional based on Site URL fix.
-- **Broken delete confirm on companies/[id]:** `onSubmit={() => confirm(...) ||
-  event?.preventDefault()}` on a server-component form. `event` is undefined and
-  server forms do not register client handlers; confirm dialog never fires.
-- **site_content YAML textarea:** free-form text; collapsing the multi-line
-  format to one line causes silent parser failure. Pre-fill with template
-  content rather than placeholder text. Deferred.
-- Disclosed weekly rides (`latest_weekly_rides_disclosed`) is a manual
-  site_content entry; must be updated when Waymo makes new disclosures.
-  If episodic disclosures become more frequent, consider promoting to a
-  dedicated `disclosed_metrics` table. The `latest_*_disclosed` key
-  prefix is the agreed convention for future additions.
-- fleet-snapshots, ride-estimates, financial-periods mutations do not revalidatePath.
-- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded (CLAUDE.md).
-- `is_published` DB-level ISR trigger not wired; admin mutation revalidation covers it.
+- Magic-link prod click-through never re-verified since 1.6 (user task).
+- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded
+  (site_content, operator_program_roles). See CLAUDE.md.
+- `is_published` DB-level ISR trigger not wired; admin mutation
+  revalidation covers it.
 - City detail pages not built; timeline shows disabled links.
 - `service_area_geojson` exists but unused; polygon rendering deferred.
-- All public routes except /, /milestones*, /methodology* are stubs.
+- Public routes /landscape, /financials, /earnings, /safety, /outlook,
+  /unit-economics are still stubs (landscape lands in 3.3).
+- Resolved in Phase 2 (kept for history): companies delete-confirm,
+  revalidatePath gaps, site_content YAML disclosed-metrics convention.
 - Quantitative series are CA-only until 2.3 (national disclosed metrics)
   lands; pre-2025 CPUC baseline deferred to Phase 4.
 - CPUC incident_metrics not ingested; safety-phase territory.
@@ -489,7 +488,8 @@ scripts/
   test-cpuc-parser.ts          fixture tests for scraper parse and calendar
   seed-*.ts, update-*.ts, fix-*.ts   idempotent seed and fix scripts
                                (cities, milestones, disclosed metrics,
-                               operator programs, methodology, site_content)
+                               operator programs, competitor snapshots,
+                               methodology, site_content)
 
 .github/
   workflows/

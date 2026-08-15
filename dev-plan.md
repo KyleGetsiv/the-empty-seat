@@ -260,10 +260,10 @@ competitor_snapshots
 
 **Do**:
 - Enter initial snapshots for Waymo, Zoox, Tesla, Nuro/Lucid/Uber, Baidu Apollo Go, Pony.ai, WeRide, plus the minor US operators, using the State of the world briefing as the checklist but re-verifying each figure against its primary source at entry time. UNVERIFIED items stay out.
-- Timing note: Baidu and Pony.ai report Q2 2026 earnings on 2026-08-18. If this module runs after that date, use the fresh numbers.
+- Timing note: Baidu and Pony.ai report Q2 2026 earnings on 2026-08-18. Module 3.2 ran 2026-08-15 with Q1 2026 figures for both. **TODO after 2026-08-18: add a fresh snapshot row for `apollo-go` and `pony-ai` via /admin/snapshots (or extend the seed script) with Q2 numbers, and check whether the Wuhan outage and permit freeze dented Apollo Go's Q2 ride volume.**
 - Every snapshot row carries `disclosure_quality` honestly: Tesla's "7 metros" is company_disclosed; its ~21-car unsupervised fleet is press_reported (derived from Tesla's own chart by analysts); Waymo CPUC trips are regulatory.
 
-**Acceptance**: at least one complete, sourced snapshot per major operator; spot-check that every row's source URL resolves.
+**Acceptance**: at least one complete, sourced snapshot per major operator; spot-check that every row's source URL resolves. (Done 2026-08-15: 11 snapshots, 30 competitor city rows via `scripts/seed-competitor-snapshots.ts`.)
 
 ### 3.3 Landscape page
 
