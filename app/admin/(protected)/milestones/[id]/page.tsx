@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { MILESTONE_TAGS, tagLabel } from "@/lib/milestones/tags";
 import Link from "next/link";
+import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 
 export default async function EditMilestonePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -124,7 +125,7 @@ export default async function EditMilestonePage({ params }: { params: Promise<{ 
       </form>
 
       <form action={remove}>
-        <button type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete milestone</button>
+        <ConfirmDeleteButton label="Delete milestone" />
       </form>
     </div>
   );

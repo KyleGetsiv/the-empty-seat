@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -31,6 +32,7 @@ export default async function NewFinancialPeriodPage() {
       console.error("[create financial_periods]", error);
       throw new Error(`Failed to create financial_periods row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/financial-periods");
   }
 

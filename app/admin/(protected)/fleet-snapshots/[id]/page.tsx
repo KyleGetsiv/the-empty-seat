@@ -1,6 +1,8 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 
 export default async function EditFleetSnapshotPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,6 +33,7 @@ export default async function EditFleetSnapshotPage({ params }: { params: Promis
       console.error("[update fleet_snapshots]", error);
       throw new Error(`Failed to update fleet_snapshots row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/fleet-snapshots");
   }
 
@@ -41,6 +44,7 @@ export default async function EditFleetSnapshotPage({ params }: { params: Promis
       console.error("[delete fleet_snapshots]", error);
       throw new Error(`Failed to delete fleet_snapshots row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/fleet-snapshots");
   }
 
@@ -96,7 +100,7 @@ export default async function EditFleetSnapshotPage({ params }: { params: Promis
       </form>
 
       <form action={remove}>
-        <button type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete snapshot</button>
+        <ConfirmDeleteButton label="Delete snapshot" />
       </form>
     </div>
   );

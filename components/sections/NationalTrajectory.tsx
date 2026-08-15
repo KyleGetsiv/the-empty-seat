@@ -26,6 +26,8 @@ export async function NationalTrajectory() {
     thirdParty: p.attribution !== "company" ? p.value : null,
     statedBy: p.stated_by,
     attribution: p.attribution,
+    sourceUrl: p.source?.url ?? null,
+    sourcePublisher: p.source?.publisher ?? null,
   }));
 
   const latestCompany = [...series]
@@ -56,7 +58,8 @@ export async function NationalTrajectory() {
             <DisclosedRidesChart points={points} />
 
             <p className="mt-6 text-xs text-muted max-w-2xl leading-relaxed">
-              Each point is a public disclosure, linked on the{" "}
+              Each dot is a public disclosure; click it to open the source, or
+              browse the{" "}
               <a
                 href="/methodology/sources"
                 className="underline hover:text-foreground transition-colors"

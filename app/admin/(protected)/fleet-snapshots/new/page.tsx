@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -28,6 +29,7 @@ export default async function NewFleetSnapshotPage() {
       console.error("[create fleet_snapshots]", error);
       throw new Error(`Failed to create fleet_snapshots row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/fleet-snapshots");
   }
 

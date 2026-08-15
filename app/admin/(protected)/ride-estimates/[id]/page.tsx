@@ -1,6 +1,8 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 
 export default async function EditRideEstimatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,6 +35,7 @@ export default async function EditRideEstimatePage({ params }: { params: Promise
       console.error("[update ride_estimates]", error);
       throw new Error(`Failed to update ride_estimates row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/ride-estimates");
   }
 
@@ -43,6 +46,7 @@ export default async function EditRideEstimatePage({ params }: { params: Promise
       console.error("[delete ride_estimates]", error);
       throw new Error(`Failed to delete ride_estimates row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/ride-estimates");
   }
 
@@ -112,7 +116,7 @@ export default async function EditRideEstimatePage({ params }: { params: Promise
       </form>
 
       <form action={remove}>
-        <button type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete estimate</button>
+        <ConfirmDeleteButton label="Delete estimate" />
       </form>
     </div>
   );

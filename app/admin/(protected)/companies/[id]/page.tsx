@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 
 export default async function EditCompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -63,10 +64,8 @@ export default async function EditCompanyPage({ params }: { params: Promise<{ id
         </div>
       </form>
 
-      <form action={remove} onSubmit={() => confirm("Delete this company?") || event?.preventDefault()}>
-        <button type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-          Delete company
-        </button>
+      <form action={remove}>
+        <ConfirmDeleteButton label="Delete company" />
       </form>
     </div>
   );

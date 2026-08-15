@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 2.4
+Module: 2.6
 Date: 2026-08-15
-Commit: 2.4 work
+Commit: 2.6 work
 
 ---
 
@@ -196,9 +196,9 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /api/cron/scraper-health | daily CPUC freshness report to Slack (quarters in DB, pending, overdue) | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
 
-Note: fleet-snapshots/ride-estimates/financial-periods mutations do not
-call revalidatePath. Sources revalidates /methodology/sources; site-content
-revalidates /methodology and /methodology/sources.
+Note: all admin mutations now revalidate "/" at minimum (2.6). Sources
+also revalidates /methodology/sources; site-content revalidates
+/methodology and /methodology/sources.
 
 ---
 
@@ -250,9 +250,16 @@ revalidates /methodology and /methodology/sources.
 - **DisclosedRidesChart (client):** first chart in this directory (2.3).
   Recharts ComposedChart over epoch-ms time axis. Company disclosures:
   monotone line with filled dots; third-party figures: open dots, no
-  line. 1M end-2026 target as dashed ReferenceLine annotation. Legend
-  caption explains the dot convention. Tooltip shows figure, date,
-  stated_by, attribution.
+  line. Every dot is an SVG link to its source row's URL (2.6, opens in
+  new tab; tooltip says so). 1M end-2026 target as dashed ReferenceLine.
+  Legend caption explains the dot convention.
+
+### components/admin/
+
+- **ConfirmDeleteButton (client):** two-step delete confirm for admin
+  server-action forms (first click arms, second submits; disarms on blur
+  or 5s). Replaces browser confirm() dialogs, which cannot work on server
+  component forms. Used by every admin delete form (2.6).
 
 ### components/milestones/
 
@@ -378,17 +385,15 @@ revalidates /methodology and /methodology/sources.
 
 **Pre-launch:** see `pre-launch.md` at repo root.
 
-**Resumption audit (2026-08-15, module 2.1), status after 2.2:**
-- FIXED in 2.2: dead mirror (direct cpuc.ca.gov scraper), silent-skip
-  semantics, placeholder health cron, all-quarters-summed-as-"2025" bug,
-  hardcoded filing-date copy (now derived from the filing calendar).
-- PENDING RUN: `scripts/fix-remove-stray-ride-row.ts` (stray 500000/wk
-  row); needs local run with service key. KeyStats filters sub-quarter
-  rows defensively either way.
-- Waitlist/employee badge collapse in timeline and map popup: FIXED in
-  2.4 (full status label maps). Remaining for 2.6: companies
-  delete-confirm bug, missing revalidatePath calls, types regeneration.
-- Supabase auto-pause resumed and repo made public 2026-08-15.
+**Resumption audit (2026-08-15, module 2.1):** all findings resolved
+across 2.2-2.6: dead mirror (direct scraper), silent-skip semantics,
+placeholder health cron, year-scoping bug, hardcoded filing dates, stray
+500K row deleted, badge collapse, delete-confirm (ConfirmDeleteButton on
+all 8 admin delete forms), revalidatePath on all mutations. Supabase
+auto-pause resumed and repo made public 2026-08-15. PENDING USER:
+regenerate lib/supabase/types.ts
+(`supabase gen types typescript --linked > lib/supabase/types.ts`) and
+the magic-link prod retest deferred since 1.6.
 
 **Structural debt:**
 - **Magic-link verification pending:** admin click-through against prod was deferred from 1.6 due to Supabase email rate limit; provisional based on Site URL fix.

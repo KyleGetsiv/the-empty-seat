@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 
@@ -30,6 +31,7 @@ export default async function NewRideEstimatePage() {
       console.error("[create ride_estimates]", error);
       throw new Error(`Failed to create ride_estimates row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/ride-estimates");
   }
 

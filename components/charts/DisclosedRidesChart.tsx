@@ -26,6 +26,8 @@ export type DisclosedChartPoint = {
   thirdParty: number | null;
   statedBy: string | null;
   attribution: string;
+  sourceUrl: string | null;
+  sourcePublisher: string | null;
 };
 
 const ACCENT = "var(--color-accent)";
@@ -44,6 +46,32 @@ function monthYear(t: number): string {
   });
 }
 
+// Wraps a dot in an SVG link to its source when one exists, so every data
+// point is directly clickable through to the primary source. Zero-trust by
+// construction: the provenance lives on the dot, not just the sources page.
+function SourceLink({
+  href,
+  label,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  children: React.ReactElement;
+}) {
+  if (!href) return children;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      style={{ cursor: "pointer" }}
+    >
+      {children}
+    </a>
+  );
+}
+
 // Filled dot: company-disclosed.
 function CompanyDot(props: {
   cx?: number;
@@ -53,7 +81,14 @@ function CompanyDot(props: {
 }) {
   const { cx, cy, payload } = props;
   if (cx == null || cy == null || payload?.company == null) return null;
-  return <circle cx={cx} cy={cy} r={5.5} fill={ACCENT} stroke="none" />;
+  return (
+    <SourceLink
+      href={payload.sourceUrl}
+      label={`Source for ${payload.dateLabel} disclosure`}
+    >
+      <circle cx={cx} cy={cy} r={5.5} fill={ACCENT} stroke="none" />
+    </SourceLink>
+  );
 }
 
 // Open dot: third-party figure.
@@ -65,14 +100,19 @@ function ThirdPartyDot(props: {
   const { cx, cy, payload } = props;
   if (cx == null || cy == null || payload?.thirdParty == null) return null;
   return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={5.5}
-      fill="var(--color-background)"
-      stroke={ACCENT}
-      strokeWidth={2}
-    />
+    <SourceLink
+      href={payload.sourceUrl}
+      label={`Source for ${payload.dateLabel} third-party figure`}
+    >
+      <circle
+        cx={cx}
+        cy={cy}
+        r={5.5}
+        fill="var(--color-background)"
+        stroke={ACCENT}
+        strokeWidth={2}
+      />
+    </SourceLink>
   );
 }
 
@@ -96,6 +136,12 @@ function CustomTooltip({
         {isCompany ? "Company-disclosed" : "Third-party figure"}
         {p.statedBy ? `: ${p.statedBy}` : ""}
       </p>
+      {p.sourceUrl && (
+        <p className="text-accent mt-1.5 text-xs">
+          Click the dot to open the source
+          {p.sourcePublisher ? ` (${p.sourcePublisher})` : ""}
+        </p>
+      )}
     </div>
   );
 }

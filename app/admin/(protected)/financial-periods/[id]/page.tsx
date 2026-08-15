@@ -1,6 +1,8 @@
 import { redirect, notFound } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
+import { ConfirmDeleteButton } from "@/components/admin/ConfirmDeleteButton";
 
 export default async function EditFinancialPeriodPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,6 +36,7 @@ export default async function EditFinancialPeriodPage({ params }: { params: Prom
       console.error("[update financial_periods]", error);
       throw new Error(`Failed to update financial_periods row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/financial-periods");
   }
 
@@ -44,6 +47,7 @@ export default async function EditFinancialPeriodPage({ params }: { params: Prom
       console.error("[delete financial_periods]", error);
       throw new Error(`Failed to delete financial_periods row: ${error.message}`);
     }
+    revalidatePath("/");
     redirect("/admin/financial-periods");
   }
 
@@ -115,7 +119,7 @@ export default async function EditFinancialPeriodPage({ params }: { params: Prom
       </form>
 
       <form action={remove}>
-        <button type="submit" className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete period</button>
+        <ConfirmDeleteButton label="Delete period" />
       </form>
     </div>
   );
