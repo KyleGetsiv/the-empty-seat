@@ -293,6 +293,85 @@ export type Database = {
           },
         ]
       }
+      earnings_events: {
+        Row: {
+          accession_number: string | null
+          company_id: string
+          created_at: string
+          error: string | null
+          event_date: string
+          event_type: string
+          extraction_model: string | null
+          extraction_version: number | null
+          fiscal_period: string
+          id: string
+          processed_at: string | null
+          processing_status: string
+          source_id: string | null
+          storage_key: string | null
+          subject_company_id: string
+          updated_at: string
+        }
+        Insert: {
+          accession_number?: string | null
+          company_id: string
+          created_at?: string
+          error?: string | null
+          event_date: string
+          event_type: string
+          extraction_model?: string | null
+          extraction_version?: number | null
+          fiscal_period: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          source_id?: string | null
+          storage_key?: string | null
+          subject_company_id: string
+          updated_at?: string
+        }
+        Update: {
+          accession_number?: string | null
+          company_id?: string
+          created_at?: string
+          error?: string | null
+          event_date?: string
+          event_type?: string
+          extraction_model?: string | null
+          extraction_version?: number | null
+          fiscal_period?: string
+          id?: string
+          processed_at?: string | null
+          processing_status?: string
+          source_id?: string | null
+          storage_key?: string | null
+          subject_company_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "earnings_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "earnings_events_subject_company_id_fkey"
+            columns: ["subject_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "earnings_events_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_periods: {
         Row: {
           capex_usd: number | null
@@ -680,6 +759,69 @@ export type Database = {
           url?: string
         }
         Relationships: []
+      }
+      waymo_mentions: {
+        Row: {
+          confidence: string
+          created_at: string
+          disclosed_metric_id: string | null
+          earnings_event_id: string
+          extracted_metric: Json | null
+          id: string
+          kyle_annotation: string | null
+          mention_type: string
+          page_or_timestamp: string | null
+          quote_text: string
+          review_status: string
+          speaker: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence: string
+          created_at?: string
+          disclosed_metric_id?: string | null
+          earnings_event_id: string
+          extracted_metric?: Json | null
+          id?: string
+          kyle_annotation?: string | null
+          mention_type: string
+          page_or_timestamp?: string | null
+          quote_text: string
+          review_status?: string
+          speaker?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string
+          created_at?: string
+          disclosed_metric_id?: string | null
+          earnings_event_id?: string
+          extracted_metric?: Json | null
+          id?: string
+          kyle_annotation?: string | null
+          mention_type?: string
+          page_or_timestamp?: string | null
+          quote_text?: string
+          review_status?: string
+          speaker?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waymo_mentions_earnings_event_id_fkey"
+            columns: ["earnings_event_id"]
+            isOneToOne: false
+            referencedRelation: "earnings_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waymo_mentions_disclosed_metric_id_fkey"
+            columns: ["disclosed_metric_id"]
+            isOneToOne: false
+            referencedRelation: "disclosed_metrics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

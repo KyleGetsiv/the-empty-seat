@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 3.5
+Module: 4.1
 Date: 2026-08-15
-Commit: 3.5 work
+Commit: 4.1 work
 
 ---
 
@@ -23,37 +23,32 @@ Commit: 3.5 work
 #### companies
 Reference table, 13 rows after 3.1 (Waymo, Zoox, Tesla, Nuro, Lucid,
 Uber, Avride, May Mobility, Motional, Pony.ai, WeRide, Baidu Apollo Go,
-Didi). Columns: `id` (pk), `slug` (unique), `display_name`,
-`founded_year`, `parent_company`, `hq_country`, `ownership`,
-`status_summary` (one admin-maintained sentence; the last three added
-0010), `created_at`, `updated_at`.
+Didi). Columns: `id`, `slug` (unique), `display_name`, `founded_year`,
+`parent_company`, `hq_country`, `ownership`, `status_summary` (last
+three 0010), timestamps.
 
 #### operator_programs, operator_program_roles (0010)
-A program is the unit on the landscape page: the thing actually on the
-road. `operator_programs`: `id` (pk), `slug` (unique), `display_name`,
-`lead_company_id` (fk), `summary`, `is_active`, timestamps. Roles join
+A program is the unit on the landscape page: the thing on the road.
+`operator_programs`: `id`, `slug` (unique), `display_name`,
+`lead_company_id`, `summary`, `is_active`, timestamps. Roles join
 (composite pk program_id, company_id, role; role in 'av_developer' |
-'vehicle_platform' | 'fleet_operator' | 'network'; no audit trigger per
-the composite-pk limitation, acceptable for a pure join table). Single-
-company programs hold all roles; Uber's premium program is Nuro
-(av_developer) + Lucid (vehicle_platform) + Uber (fleet_operator,
-network); Uber also holds 'network' on Waymo One, Apollo Go, Pony,
-WeRide, Avride, May Mobility, Motional. 11 programs seeded by
-`scripts/seed-operator-programs.ts`.
+'vehicle_platform' | 'fleet_operator' | 'network'; no audit trigger,
+acceptable for a pure join). Single-company programs hold all roles;
+Uber's premium program is Nuro + Lucid + Uber; Uber also holds 'network'
+on Waymo One, Apollo Go, Pony, WeRide, Avride, May Mobility, Motional.
+11 programs seeded (`scripts/seed-operator-programs.ts`).
 
 #### competitor_snapshots (0010)
-Point-in-time operational readings per program; unique (program_id,
-snapshot_date). All metric columns nullable by design: `cities_serving_
-public`, `cities_operating_total`, `vehicle_count`, `weekly_rides`,
+Point-in-time readings per program; unique (program_id, snapshot_date).
+Metric columns all nullable: `cities_serving_public`,
+`cities_operating_total`, `vehicle_count`, `weekly_rides`,
 `cumulative_rides`, `autonomous_miles_cumulative`, `funding_total_usd`,
-`implied_valuation_usd`. `supervision` check: 'driverless' |
-'safety_operator' | 'mixed' | 'human_is_legal_driver' (the last exists
-for Tesla's Bay Area TCP operation). `disclosure_quality` check:
-'regulatory' | 'company_disclosed' | 'earnings_disclosed' |
-'press_reported' | 'estimated'. `source_id`, `notes`, timestamps; audit
-and updated_at triggers. Seeded 3.2 with one row per program (11) by
-`scripts/seed-competitor-snapshots.ts`; Apollo Go and Pony rows are Q1
-2026 and need a Q2 refresh after their 2026-08-18 earnings.
+`implied_valuation_usd`. `supervision` check ('driverless',
+'safety_operator', 'mixed', 'human_is_legal_driver'); `disclosure_
+quality` check ('regulatory', 'company_disclosed', 'earnings_disclosed',
+'press_reported', 'estimated'). `source_id`, `notes`, timestamps.
+Seeded 3.2 (11 rows); Apollo Go and Pony need a Q2 refresh after
+2026-08-18 earnings.
 
 #### sources
 Every primary source linked to a data point; scrapers and admins both
@@ -62,25 +57,17 @@ insert. Columns: `id` (pk), `url`, `publisher`, `title`, `published_at`
 dedupe), `storage_key` (nullable, raw doc in Storage), `created_at`.
 
 #### cities
-One row per city per company. Holds all operational and geographic data
-for a market. `status` check (0009): 'announced', 'waitlist', 'employee',
-'public', 'paused'. 'employee' = fully driverless operations with
-employee-only riders ahead of public access. As of 2.4 the Waymo roster
-is 18 rows: 8 public, 2 waitlist, 4 employee, 3 announced (no launch
-date, so hidden from timeline/map), plus Bay Area naming note.
-`program_id` (nullable fk operator_programs, 0010) links competitor
-cities to their program; Waymo rows leave it null. 30 competitor city
-rows seeded in 3.2 (Zoox, Tesla, Nuro/Lucid/Uber, Apollo Go, Pony,
-WeRide, Avride, May, Motional). Waymo-only pages filter by Waymo's
-company_id and are unaffected. `service_area_geojson`
-is reserved; the map derives circles from `service_area_sq_mi` only.
-`external_keys` is populated lazily by scrapers (empty `{}` by default).
-Columns: `id` (pk), `company_id` (fk), `name` (unique with company_id,
-0004), `metro_area`, `country` (default 'US'), `launch_date`,
-`public_access_date`, `service_area_sq_mi`, `status`, `latitude`,
-`longitude`, `notes`, `service_area_geojson` (jsonb, 0005),
-`external_keys` (jsonb not null default '{}', 0006), `program_id`
-(0010), `created_at`, `updated_at`.
+One row per city per company. `status` check (0009): 'announced',
+'waitlist', 'employee' (driverless ops, employee riders only), 'public',
+'paused'. Waymo roster 18 rows (9 public, 2 waitlist, 4 employee, 3
+announced with no launch_date, hidden from timeline/map). `program_id`
+(nullable fk, 0010) links competitor cities to programs; 30 seeded in
+3.2; Waymo rows leave it null and Waymo pages filter by company_id.
+Columns: `id`, `company_id`, `name` (unique with company_id, 0004),
+`metro_area`, `country`, `launch_date`, `public_access_date`,
+`service_area_sq_mi`, `status`, `latitude`, `longitude`, `notes`,
+`service_area_geojson` (jsonb, 0005, unused), `external_keys` (jsonb,
+0006), `program_id`, timestamps.
 
 #### milestones
 Dated events in Waymo's history; drafts (`is_published = false`) are
@@ -117,18 +104,31 @@ nullable numerics), `is_disclosed`, `source_id` (nullable fk),
 `methodology_note`, `created_at`, `updated_at`.
 
 #### disclosed_metrics
-Point-in-time public disclosures (module 2.3), one row per
-(company, metric, as_of); unique constraint on that triple makes seeding
-idempotent. Metric slugs: 'weekly_rides', 'cumulative_trips',
-'fleet_size', 'cities_count'. `attribution` check constraint:
-'company' | 'investor' | 'media' | 'analyst'. Columns: `id` (pk),
-`company_id` (fk), `metric`, `value` (numeric), `as_of` (date), `scope`
-(default 'worldwide'; seeded rows use 'US'), `attribution` (default
-'company'), `source_id` (nullable fk, always set in practice),
-`stated_by`, `notes`, `created_at`, `updated_at`. Audit and updated_at
-triggers attached. Seeded with Waymo's verified disclosure arc by
-`scripts/seed-disclosed-metrics.ts` (8 weekly_rides incl. the Tiger
-Global 450K investor figure, 4 cumulative_trips, 3 fleet_size).
+Point-in-time public disclosures (2.3), unique (company, metric, as_of).
+Metric slugs: 'weekly_rides', 'cumulative_trips', 'fleet_size',
+'cities_count'. `attribution` check: 'company' | 'investor' | 'media' |
+'analyst'. Columns: `id`, `company_id`, `metric`, `value`, `as_of`,
+`scope`, `attribution`, `source_id`, `stated_by`, `notes`, timestamps.
+Seeded with Waymo's verified arc (8 weekly_rides incl. Tiger Global
+450K as 'investor', 4 cumulative_trips, 3 fleet_size); also the target
+of metric promotion from the earnings review queue (4.1).
+
+#### earnings_events, waymo_mentions (0012, module 4.1)
+`earnings_events`: one row per source document. `company_id` = filer
+(Alphabet), `subject_company_id` = subject (Waymo), `fiscal_period`,
+`event_type` check ('10-K','10-Q','8-K','earnings_call',
+'shareholder_letter','investor_day','press_release'), `event_date`,
+`source_id`, `storage_key`, `accession_number` (unique; SEC dedupe),
+`processing_status` ('pending','extracted','reviewed','failed'),
+`extraction_version`, `extraction_model`, `processed_at`, `error`,
+timestamps. `waymo_mentions`: one per quote; `mention_type` check (11
+values), `quote_text`, `speaker`, `extracted_metric` jsonb,
+`confidence`, `kyle_annotation`, `review_status` ('pending','approved',
+'rejected'), `page_or_timestamp`, `disclosed_metric_id` (set when
+approval promotes a metric to disclosed_metrics), timestamps. RLS: anon
+sees events and APPROVED mentions only (milestones pattern). Audit and
+updated_at triggers on both. The v1 extracted_metrics table is dropped;
+disclosed_metrics is the metrics store.
 
 #### site_content
 Key/value store for admin-editable editorial copy: `key` (text pk, e.g.
@@ -168,7 +168,7 @@ nullable), `after` (jsonb, nullable), `created_at`.
   service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
   0008 disclosed_metrics; 0009 cities 'employee' status; 0010
   operator programs, roles, competitor_snapshots, companies fields; 0011
-  ride_estimates program_id + tier.
+  ride_estimates program_id + tier; 0012 earnings_events, waymo_mentions.
 
 ---
 
@@ -203,6 +203,7 @@ programs and snapshots /landscape.
 | /admin | dashboard with row counts |
 | /admin/{cities, companies, sources, fleet-snapshots, ride-estimates, financial-periods, disclosed-metrics, snapshots} | full CRUD (list, new, [id]); disclosed-metrics and snapshots show attribution/quality badges |
 | /admin/milestones | CRUD plus publish toggle |
+| /admin/earnings, /admin/earnings/[id] | events list with per-event pending/approved/rejected counts; review queue: approve/reject/save per mention, bulk approve, metric promotion to disclosed_metrics on approve (ride_count, city_count, fleet_size); event flips to 'reviewed' when no pending remain |
 | /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
 | /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
 | /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
@@ -381,7 +382,7 @@ also revalidates /methodology/sources; site-content revalidates
 | Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled; Storage bucket `scraped-raw` (private) holds raw scraped CSVs; Site URL = prod Vercel URL, Redirect URLs include localhost wildcard for dev magic links |
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
-| Anthropic API | not yet wired | ANTHROPIC_API_KEY | reserved for Phase 4 extraction |
+| Anthropic API | model decided, not yet wired | ANTHROPIC_API_KEY | `claude-sonnet-5` for extraction (4.4) |
 | Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
 | GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | .github/workflows/scrape-cpuc.yml, weekly Monday 13:17 UTC |
 
@@ -467,7 +468,8 @@ app/
                              companies, milestones (+publish toggle),
                              sources, fleet-snapshots, ride-estimates,
                              financial-periods, disclosed-metrics, programs,
-                             snapshots, site-content ([key] edit)
+                             snapshots, site-content ([key] edit), earnings
+                             (list + [id] review queue)
   api/cron/scraper-health/   daily CPUC freshness report
 
 components/
@@ -490,7 +492,7 @@ lib/
   glossary/index.ts, milestones/tags.ts, scrapers/cpuc.ts, scrapers/cpuc-xlsx.ts
   supabase/                  server, admin, browser, types
 
-supabase/                    migrations/ 0001-0011; seed.sql (6 companies)
+supabase/                    migrations/ 0001-0012; seed.sql (6 companies)
 scripts/                     run-scraper-cpuc, test-cpuc-parser, and
                              idempotent seed-*/update-*/fix-* scripts
 .github/workflows/           scrape-cpuc.yml (weekly Mon 13:17 UTC)

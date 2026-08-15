@@ -14,7 +14,7 @@ The tone is editorial research, not product marketing. Think "essay you can live
 - **Hosting**: Vercel
 - **Database**: Supabase (Postgres, Auth, Storage)
 - **Background jobs**: Vercel Cron for light work, GitHub Actions for heavier scrapes
-- **LLM extraction**: Anthropic API. The originally pinned model (`claude-sonnet-4-20250514`, chosen April 2026) predates the hiatus; re-check the current model lineup and surface a recommendation for approval at Phase 4 start, before any extraction code is written.
+- **LLM extraction**: Anthropic API, model `claude-sonnet-5` (decided 2026-08-15 at Phase 4 start: schema-following extraction with citations at roughly $1-2 per quarter of Alphabet documents; the earlier `claude-sonnet-4-20250514` pin is a legacy snapshot). Record the model string on every `earnings_events` row so re-extraction with a newer model is traceable.
 - **Maps**: Mapbox GL JS
 - **Tooltips, dialogs, menus**: Radix UI primitives
 - **Monitoring**: Vercel logs + Slack incoming webhook for scraper failures

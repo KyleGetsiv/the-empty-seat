@@ -41,7 +41,7 @@ One principle is added:
 
 Unchanged from v1 and from `CLAUDE.md` (Next.js 16 App Router with `proxy.ts`, TypeScript, Tailwind v4 via `@theme` in `globals.css`, Recharts, Framer Motion, Vercel, Supabase, Vercel Cron plus GitHub Actions, Mapbox GL JS, Radix UI, Slack webhook monitoring). Do not substitute without asking.
 
-One open item: `CLAUDE.md` pins the extraction model to `claude-sonnet-4-20250514`, chosen in April 2026. Before Phase 4 begins, check the current Anthropic model lineup and propose the best price-appropriate model for structured extraction; update `CLAUDE.md` with the user's approval. This is a surfaced decision, not a silent substitution.
+Extraction model decided 2026-08-15 at Phase 4 start: `claude-sonnet-5` (Sonnet 5, $2/$10 per MTok; roughly $1-2 per quarter of Alphabet documents, ~$10 for the 8-quarter backfill). CLAUDE.md updated.
 
 ## Phase map: v1 to v2
 
@@ -309,7 +309,9 @@ competitor_snapshots
 
 ### 4.1 Data model
 
-As specified in v1 4.1 (`earnings_events`, `waymo_mentions`, `extracted_metrics` tables), with one addition: `earnings_events.event_type` gains 'shareholder_letter'. Show full migration SQL before applying.
+As specified in v1 4.1 with two changes: `earnings_events.event_type` gains 'shareholder_letter', and the v1 `extracted_metrics` table is dropped in favor of the existing `disclosed_metrics` table (2.3): approving a metric-type mention in the review queue promotes it to a `disclosed_metrics` row with `attribution 'company'` and links back via `waymo_mentions.disclosed_metric_id`. Show full migration SQL before applying.
+
+(Built 2026-08-15: migration 0012, types, `/admin/earnings` events list and `/admin/earnings/[id]` review queue with approve/reject/edit, bulk approve, and metric promotion for ride_count -> weekly_rides, city_count -> cities_count, fleet_size -> fleet_size. Model decision recorded in CLAUDE.md.)
 
 ### 4.2 SEC EDGAR scraper
 
@@ -399,7 +401,7 @@ Open (surface before or during the named module):
 2. **Announced-cities inclusion policy** (2.4): full announced list vs. only dated/operating markets. Recommendation: only dated/operating.
 3. ~~Operator roster~~ Decided 2026-08-15: include minor operators; Nuro/Lucid/Uber elevated to first-class with role modeling (see 3.1).
 4. **Landscape map approach** (3.3): extend CoverageMap vs. separate lighter component.
-5. **Extraction model** (4.4): current Anthropic lineup choice to replace the pinned April 2026 Sonnet string; also whether extraction cost ceiling matters (expected low; Alphabet publishes ~8 documents/quarter).
+5. ~~Extraction model~~ Decided 2026-08-15: `claude-sonnet-5`.
 6. **Transcript source** (4.3): Motley Fool accessibility re-check; fallback selection if blocked.
 7. **Custom domain** (5.2): needs a decision and registrar access before Phase 5.
 8. ~~Zoox CPUC pilot data availability~~ Resolved 2026-08-15: Zoox files the CPUC template as an xlsx inside the pilot zip (Month-Level sheet, same columns); scraper reads it directly. Aurora/Tensor/WeRide pilot filings are non-template and out of scope.
