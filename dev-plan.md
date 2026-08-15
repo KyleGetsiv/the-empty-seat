@@ -315,7 +315,9 @@ As specified in v1 4.1 with two changes: `earnings_events.event_type` gains 'sha
 
 ### 4.2 SEC EDGAR scraper
 
-As specified in v1 4.2 (`lib/scrapers/sec_edgar.ts`, daily GitHub Action, Alphabet CIK 0001652044, 10-K/10-Q/8-K detection by accession number, raw filings to Supabase Storage, `pending` status rows, SEC fair-use etiquette).
+As specified in v1 4.2 (`lib/scrapers/sec-edgar.ts`, daily GitHub Action, Alphabet CIK 0001652044, 10-K/10-Q/8-K detection by accession number, raw filings to Supabase Storage, `pending` status rows, SEC fair-use etiquette).
+
+(Built 2026-08-15. Design notes from investigating the live API: 8-Ks are filtered to item 2.02 (earnings releases) since Alphabet files many governance 8-Ks; the EX-99.1 press-release exhibit is fetched alongside the primary doc because that is where the numbers live; 8-K fiscal period is the quarter before the release date. Verified at the primary source that Alphabet's Q2 2026 earnings release contains zero Waymo mentions (Other Bets revenue $382M, operating loss $1.8B), so the pipeline's honest output for that event is "0 mentions". Alphabet added as a companies row (filer). Daily action `scrape-edgar.yml`, 6 fixture tests.)
 
 ### 4.3 Earnings call transcript scraper
 

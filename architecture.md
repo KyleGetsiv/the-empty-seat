@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 4.1
+Module: 4.2
 Date: 2026-08-15
-Commit: 4.1 work
+Commit: 4.2 work
 
 ---
 
@@ -21,9 +21,9 @@ Commit: 4.1 work
 ### Tables
 
 #### companies
-Reference table, 13 rows after 3.1 (Waymo, Zoox, Tesla, Nuro, Lucid,
+Reference table, 14 rows after 4.2 (Waymo, Zoox, Tesla, Nuro, Lucid,
 Uber, Avride, May Mobility, Motional, Pony.ai, WeRide, Baidu Apollo Go,
-Didi). Columns: `id`, `slug` (unique), `display_name`, `founded_year`,
+Didi, plus Alphabet as SEC filer, not an operator). Columns: `id`, `slug` (unique), `display_name`, `founded_year`,
 `parent_company`, `hq_country`, `ownership`, `status_summary` (last
 three 0010), timestamps.
 
@@ -326,10 +326,9 @@ also revalidates /methodology/sources; site-content revalidates
   complete year, derived from data (2.2); grow/decline verb matches sign.
   Footnote derives next quarter's CPUC due date from lib/cpuc-calendar.
   Pending state when data array is empty.
-- **CoverageMap (client):** Mapbox GL JS via CoverageMapClient (dynamic
-  import, ssr: false, pulsing skeleton). Circle polygons for cities with
-  sq_mi, 8px pins otherwise; non-public styling dashed/reduced; hover
-  popups; editorial palette overrides on load.
+- **CoverageMap (client):** Mapbox via CoverageMapClient (dynamic, ssr
+  false). Circle polygons for cities with sq_mi, pins otherwise; non-
+  public dashed; hover popups; editorial palette overrides.
 
 ---
 
@@ -348,20 +347,27 @@ also revalidates /methodology/sources; site-content revalidates
 - **cpuc-calendar.ts:** pure filing-calendar logic (deadlines May 1/Aug 1/
   Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-free;
   shared by scraper, health cron, and client charts.
-- **scrapers/cpuc.ts:** `runCpucScrape()`. Deployment tier (2.2): fetches
-  `waymo-deployment-YYYYqQ.zip` from cpuc.ca.gov, fflate-unzips sub-2MB
-  CSVs, parses the Driverless AV_Month rollup by header, sums the
-  quarter, upserts Waymo ride_estimates (restatements update in place),
-  archives small CSVs to Storage `scraped-raw/cpuc/...`, per-quarter
-  sources rows. Overdue quarter past grace = Slack WARN. Pilot tier
-  (3.4): fetches `av-pilot-YYYYqQ.zip`, ingests `PILOT_CARRIERS` (Zoox,
-  Nuro) driverless month-level data per program with tier 'pilot';
-  absent carriers are "not in filing", not errors. Zoox files the CPUC
-  template as an xlsx: **scrapers/cpuc-xlsx.ts** is a minimal
-  dependency-free sheet reader (workbook + rels + sharedStrings + one
-  sheet) returning "Month-Level" rows; `extractPilotMonthCsv` handles CSV
-  or xlsx. Aurora/Tensor/WeRide pilot filings are non-template and out of
-  scope. Fixture tests: `scripts/test-cpuc-parser.ts` (21, tsx).
+- **scrapers/cpuc.ts:** `runCpucScrape()`. Deployment tier (2.2):
+  `waymo-deployment-YYYYqQ.zip` from cpuc.ca.gov, fflate-unzip sub-2MB
+  CSVs, parse Driverless AV_Month by header, sum quarter, upsert Waymo
+  ride_estimates (restatements in place), archive small CSVs to Storage
+  `scraped-raw/cpuc/...`. Overdue quarter past grace = Slack WARN. Pilot
+  tier (3.4): `av-pilot-YYYYqQ.zip`, `PILOT_CARRIERS` (Zoox, Nuro) month-
+  level data per program, tier 'pilot'; absent carriers reported, not
+  errored. Zoox files xlsx: **scrapers/cpuc-xlsx.ts** is a dependency-
+  free "Month-Level" sheet reader; `extractPilotMonthCsv` handles CSV or
+  xlsx. Aurora/Tensor/WeRide filings are non-template, out of scope.
+  Tests `scripts/test-cpuc-parser.ts` (21).
+- **scrapers/sec-edgar.ts (4.2):** `runEdgarScrape({since?})` polls
+  `data.sec.gov/submissions/CIK{cik}.json` for `EDGAR_FILERS` (Alphabet
+  -> Waymo); selects 10-K, 10-Q, and 8-K item 2.02 (earnings releases
+  only); dedupes by accession_number; downloads primary doc plus the
+  EX-99.1 exhibit for 8-Ks (`pickPressReleaseExhibit`) to Storage
+  `scraped-raw/edgar/{cik}/{acc}/`; creates sources (publisher 'SEC
+  EDGAR') and earnings_events ('pending'). 8-K fiscal period = quarter
+  before release date. SCRAPER_USER_AGENT with email required; 2s
+  delays. Entry `scripts/run-scraper-edgar.ts [--since]`; tests
+  `scripts/test-edgar-parser.ts` (6, real submissions fixture).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -384,7 +390,8 @@ also revalidates /methodology/sources; site-content revalidates
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | model decided, not yet wired | ANTHROPIC_API_KEY | `claude-sonnet-5` for extraction (4.4) |
 | Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
-| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | .github/workflows/scrape-cpuc.yml, weekly Monday 13:17 UTC |
+| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | scrape-cpuc.yml weekly Mon 13:17 UTC; scrape-edgar.yml daily 14:07 UTC (workflow_dispatch accepts `since`) |
+| SEC EDGAR | live (4.2) | SCRAPER_USER_AGENT | data.sec.gov submissions API + Archives; fair-use headers; Alphabet CIK 0001652044 |
 
 ---
 
@@ -422,36 +429,29 @@ also revalidates /methodology/sources; site-content revalidates
 
 **Pre-launch:** see `pre-launch.md` at repo root.
 
-**Resumption audit (2026-08-15, module 2.1):** all findings resolved
-across 2.2-2.6: dead mirror (direct scraper), silent-skip semantics,
-placeholder health cron, year-scoping bug, hardcoded filing dates, stray
-500K row deleted, badge collapse, delete-confirm (ConfirmDeleteButton on
-all 8 admin delete forms), revalidatePath on all mutations. Supabase
-auto-pause resumed and repo made public 2026-08-15. PENDING USER:
-regenerate lib/supabase/types.ts after 0010 is pushed
-(`supabase gen types typescript --linked > lib/supabase/types.ts`) and
-the magic-link prod retest deferred since 1.6.
+**Resumption audit (2026-08-15, 2.1):** all findings resolved in 2.2-2.6
+(dead mirror, silent-skip semantics, placeholder health cron, year-
+scoping bug, hardcoded filing dates, stray 500K row, badge collapse,
+delete-confirm, revalidatePath gaps).
 
 **Structural debt:**
-- Magic-link prod click-through never re-verified since 1.6 (user task).
+- PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006
+  through 0012) with `supabase gen types typescript --linked`; magic-link
+  prod click-through not re-verified since 1.6.
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded
   (site_content, operator_program_roles). See CLAUDE.md.
 - `is_published` DB-level ISR trigger not wired; admin revalidation covers.
 - City detail pages not built; `service_area_geojson` unused.
-- Planned routes not yet built (and unlinked from nav until they are):
+- Planned routes not yet built (unlinked from nav until they are):
   /financials, /earnings, /safety, /outlook, /unit-economics.
-- Quantitative series are CA-only until 2.3 (national disclosed metrics)
-  lands; pre-2025 CPUC baseline deferred to Phase 4.
-- CPUC incident_metrics not ingested; safety-phase territory.
-- lib/supabase/types.ts manually patched for 0006 through 0010; regenerate
-  with `supabase gen types typescript` (pending user).
+- Pre-2025 CPUC baseline and CPUC incident_metrics not ingested (later
+  phases).
 
 ---
 
 ## Parking lot
 
-- State-level fill on coverage map (deferred 1.2.c); Robotaxi Tracker as
-  corroborating signal (landscape); pre-2025 CPUC baseline (Phase 4).
+- State-level map fill (1.2.c); Robotaxi Tracker as corroborating signal.
 
 ---
 
@@ -489,11 +489,11 @@ components/
 lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe)
-  glossary/index.ts, milestones/tags.ts, scrapers/cpuc.ts, scrapers/cpuc-xlsx.ts
+  glossary/index.ts, milestones/tags.ts, scrapers/{cpuc,cpuc-xlsx,sec-edgar}.ts
   supabase/                  server, admin, browser, types
 
 supabase/                    migrations/ 0001-0012; seed.sql (6 companies)
-scripts/                     run-scraper-cpuc, test-cpuc-parser, and
-                             idempotent seed-*/update-*/fix-* scripts
-.github/workflows/           scrape-cpuc.yml (weekly Mon 13:17 UTC)
+scripts/                     run-scraper-{cpuc,edgar}, test-{cpuc,edgar}-parser,
+                             and idempotent seed-*/update-*/fix-* scripts
+.github/workflows/           scrape-cpuc.yml (weekly), scrape-edgar.yml (daily)
 ```

@@ -1,5 +1,5 @@
 // scripts/seed-operator-programs.ts
-// Module 3.1: seeds the competitive-landscape roster: new company rows,
+// Module 3.1 (+4.2 adds Alphabet as SEC filer): seeds the roster: new company rows,
 // descriptive fields on existing companies, operator programs, and the
 // company-role assignments per program. Facts verified 2026-08-15 (dev
 // plan State of the world briefing). Operational snapshots come in 3.2.
@@ -159,6 +159,16 @@ const COMPANIES = [
     ownership: "Hyundai Motor Group",
     status_summary:
       "Supervised pilot in Las Vegas on the Uber app; driverless targeted end of 2026.",
+  },
+  {
+    slug: "alphabet",
+    display_name: "Alphabet",
+    founded_year: 2015,
+    parent_company: null,
+    hq_country: "US",
+    ownership: "Nasdaq: GOOGL, GOOG",
+    status_summary:
+      "Waymo's parent and SEC filer; Waymo results are reported inside the Other Bets segment. Not an operator; exists so earnings extraction can attribute filings.",
   },
   {
     slug: "didi",
