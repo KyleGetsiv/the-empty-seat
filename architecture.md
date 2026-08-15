@@ -344,16 +344,18 @@ programs and snapshots /landscape.
   `scripts/test-edgar-parser.ts` (6, real submissions fixture).
 - **scrapers/transcripts.ts (4.3):** `runTranscriptScrape({fromYear?})`
   fetches Motley Fool transcripts (robots-permitted, verified 2026-08)
-  for `TRANSCRIPT_TARGETS` (Alphabet -> Waymo). No index page: URLs are
-  discovered by probing `candidateDates` (21-day window per quarter) via
-  `transcriptUrl`; existing (filer, fiscal_period) 'earnings_call'
-  events are skipped. `extractTranscriptParagraphs` (after H2 "Full
-  Conference Call Transcript", promo DIVs dropped) and
-  `groupSpeakerTurns` ("Name:" prefix, continuation paras) produce
+  for `TRANSCRIPT_TARGETS` (Alphabet -> Waymo, tickers googl and goog).
+  Discovery via Fool's monthly sitemaps (`sitemapMonths`, two per
+  quarter; `findTranscriptUrls`), 1-2 requests per quarter; existing
+  (filer, fiscal_period) 'earnings_call' events skipped; 429 or Fool's
+  blocked page aborts the run. `extractTranscriptParagraphs` handles the
+  current layout (H2 "Full Conference Call Transcript", "Name:" prefixes)
+  and the classic pre-2025 layout (H2 "Prepared Remarks", speaker header
+  paragraphs, ends at "Call participants"); `groupSpeakerTurns` produce
   page.html + turns.json at `scraped-raw/transcripts/{slug}/{yyyy}-q{q}/`;
   creates sources (publisher 'The Motley Fool') and 'pending' events.
   Entry `scripts/run-scraper-transcripts.ts [--from-year]`; tests
-  `scripts/test-transcript-parser.ts` (6).
+  `scripts/test-transcript-parser.ts` (9).
 - **extraction/ (4.4):** `schema.ts` (Zod contract, `EXTRACTION_VERSION`,
   `EXTRACTION_MODEL` env-overridable, est. price constants);
   `text.ts` (HTML/turns.json to labelled passages `p{i}`/`t{i}`,
@@ -410,11 +412,10 @@ programs and snapshots /landscape.
 - **Derived copy:** dates, year labels, "next filing due" computed from
   data or lib/cpuc-calendar, never hardcoded (2.2 rule).
 - **Client/server lib split:** client components import only from
-  client-safe modules (landscape-types, cpuc-calendar); server data
-  modules that touch supabase/server are never imported by "use client"
-  files (3.3 rule, caught by the render harness).
-- **external_keys:** scrapers write city ids under their source slug.
-  **Confidence:** disclosed sources 'high'; community/estimated lower.
+  client-safe modules (landscape-types, cpuc-calendar); modules that
+  touch supabase/server are never imported by "use client" files.
+- **external_keys:** scrapers write city ids under their source slug;
+  disclosed sources get confidence 'high', estimated lower.
 - **Editorial copy in site_content:** factual sections seeded by Claude
   Code with `// TODO: user to replace`; page components fall back to
   inline copy when a key is absent (methodology_body, thesis_paragraphs,
@@ -436,8 +437,7 @@ programs and snapshots /landscape.
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006
   through 0013) with `supabase gen types typescript --linked`; magic-link
   prod click-through not re-verified since 1.6.
-- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded
-  (site_content, operator_program_roles). See CLAUDE.md.
+- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
   built; `service_area_geojson` unused.
 - Planned routes not yet built: /financials, /earnings, /safety,

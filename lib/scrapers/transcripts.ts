@@ -1,67 +1,89 @@
 // lib/scrapers/transcripts.ts
 // Module 4.3: earnings call transcript scraper. Source: The Motley Fool
 // transcript pages (robots.txt permits /earnings/call-transcripts/ for
-// User-agent *; verified 2026-08-15). Discovery is by URL pattern rather
-// than crawling: for each expected earnings call we probe the handful of
-// dates around the call for
-//   https://www.fool.com/earnings/call-transcripts/YYYY/MM/DD/
-//     alphabet-googl-qN-YYYY-earnings-call-transcript/
-// and stop at the first 200. Fetched pages are stored raw in Storage
-// alongside the parsed speaker-turn JSON, and an earnings_events row
-// (event_type 'earnings_call') is created in 'pending' for extraction.
+// User-agent *; verified 2026-08-15). Discovery uses Fool's monthly
+// sitemaps (https://www.fool.com/sitemap/YYYY/MM, listed in robots.txt):
+// for each expected call we read the sitemap(s) for the month or two after
+// quarter end and look for
+//   /earnings/call-transcripts/YYYY/MM/DD/alphabet-{googl|goog}-qN-YYYY-
+//     earnings-call-transcript/
+// (Fool files some quarters under GOOG, some under GOOGL). That is one or
+// two requests per quarter; the earlier date-probing approach (dozens of
+// guessed URLs at 2s spacing) tripped Fool's rate limiter on 2026-08-15 and
+// is gone. Fetched pages are stored raw in Storage alongside the parsed
+// speaker-turn JSON, and an earnings_events row (event_type
+// 'earnings_call') is created in 'pending' for extraction.
 //
-// Page structure (verified): the article body has an H2 "Full Conference
-// Call Transcript"; after it, each speaker turn begins with a paragraph
-// starting "Speaker Name: ..." and continues in following paragraphs
-// without a prefix. Interstitial promo blocks are DIVs and are dropped.
-// Everything before that H2 (date, participants, Fool's own takeaways and
-// summary) is Fool editorial and is not part of the transcript.
+// Two page layouts are handled. Current (2025+): H2 "Full Conference Call
+// Transcript", then paragraphs beginning "Speaker Name: ...", continuation
+// paragraphs without a prefix, promo DIVs dropped. Classic (2024 and
+// earlier): H2 "Prepared Remarks:" and "Questions and Answers:", speaker
+// as its own paragraph "<strong>Name</strong> -- <em>Title</em>", body
+// ends at the H2 "Call participants". Everything outside those regions is
+// Fool editorial and is not part of the transcript.
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { notifySlack } from "@/lib/notify";
 
 const STORAGE_BUCKET = "scraped-raw";
 const REQUEST_DELAY_MS = 2000;
-const FOOL_BASE = "https://www.fool.com/earnings/call-transcripts";
+const FOOL_SITEMAP_BASE = "https://www.fool.com/sitemap";
 
 export interface TranscriptTarget {
   companySlug: string; // filer, e.g. 'alphabet'
   subjectSlug: string; // 'waymo'
-  ticker: string; // 'googl'
+  tickers: string[]; // URL slugs Fool has used, e.g. ['googl', 'goog']
   companyPathName: string; // 'alphabet'
   label: string;
 }
 
 export const TRANSCRIPT_TARGETS: TranscriptTarget[] = [
-  { companySlug: "alphabet", subjectSlug: "waymo", ticker: "googl", companyPathName: "alphabet", label: "Alphabet" },
+  { companySlug: "alphabet", subjectSlug: "waymo", tickers: ["googl", "goog"], companyPathName: "alphabet", label: "Alphabet" },
 ];
 
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-export function transcriptUrl(t: TranscriptTarget, q: number, year: number, date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${FOOL_BASE}/${y}/${m}/${d}/${t.companyPathName}-${t.ticker}-q${q}-${year}-earnings-call-transcript/`;
+export function sitemapUrl(year: number, month: number): string {
+  return `${FOOL_SITEMAP_BASE}/${year}/${String(month).padStart(2, "0")}`;
 }
 
-// Alphabet reports each quarter in the last week of the month after the
-// quarter ends (late Apr, late Jul, late Oct) and early Feb for Q4.
-// Returns the candidate publication dates to probe for a given quarter.
-export function candidateDates(q: number, year: number): Date[] {
-  const windows: Record<number, [number, number, number]> = {
-    1: [year, 3, 20], // Apr 20
-    2: [year, 6, 18], // Jul 18
-    3: [year, 9, 20], // Oct 20
-    4: [year + 1, 0, 28], // Jan 28 next year
-  };
-  const [y, m, d] = windows[q];
-  const start = new Date(Date.UTC(y, m, d));
-  const out: Date[] = [];
-  for (let i = 0; i < 21; i++) out.push(new Date(start.getTime() + i * 86_400_000));
-  return out;
+// Alphabet reports in the last week of the month after quarter end (late
+// Apr, late Jul, late Oct) and early Feb for Q4; Fool posts the transcript
+// the same or next day, occasionally reposting weeks later. Reading two
+// monthly sitemaps per quarter covers both.
+export function sitemapMonths(q: number, year: number): { year: number; month: number }[] {
+  const first: Record<number, [number, number]> = { 1: [year, 4], 2: [year, 7], 3: [year, 10], 4: [year + 1, 1] };
+  const [y, m] = first[q];
+  const second = m === 12 ? { year: y + 1, month: 1 } : { year: y, month: m + 1 };
+  return [{ year: y, month: m }, second];
+}
+
+// Finds transcript URLs for (target, q, year) in a monthly sitemap. Returns
+// them sorted by publication date, earliest first (the original post; later
+// entries are reposts under the other ticker).
+export function findTranscriptUrls(sitemapXml: string, t: TranscriptTarget, q: number, year: number): string[] {
+  const tickers = t.tickers.join("|");
+  const re = new RegExp(
+    `https?://www\\.fool\\.com/earnings/call-transcripts/(\\d{4})/(\\d{2})/(\\d{2})/${t.companyPathName}-(?:${tickers})-q${q}-${year}-earnings-call-transcript/`,
+    "gi"
+  );
+  const found = new Map<string, string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sitemapXml))) found.set(m[0], `${m[1]}-${m[2]}-${m[3]}`);
+  return [...found.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([u]) => u);
+}
+
+// Publication date (YYYY-MM-DD) from a transcript URL.
+export function dateFromTranscriptUrl(url: string): string {
+  const m = url.match(/call-transcripts\/(\d{4})\/(\d{2})\/(\d{2})\//);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
+}
+
+// Fool's rate limiter serves an HTML page instead of an HTTP error.
+export function isBlockedPage(html: string): boolean {
+  return /You have been blocked/i.test(html) && /Your IP was bad/i.test(html);
 }
 
 // Quarters whose call has plausibly happened as of `now` (call is ~4 weeks
@@ -104,23 +126,49 @@ function textOf(html: string): string {
     .trim();
 }
 
-// Extracts the transcript body paragraphs after the "Full Conference Call
-// Transcript" heading. Returns null if the marker is absent (page is not a
-// full transcript, or layout changed).
+// Marker prefix for a paragraph that is only a speaker header (classic
+// layout). groupSpeakerTurns starts a new turn on it.
+export const SPEAKER_TOKEN = "\u0000SPEAKER\u0000";
+
+// Extracts the transcript body paragraphs. Current layout: after the H2
+// "Full Conference Call Transcript". Classic layout: after the H2 "Prepared
+// Remarks" and before the H2 "Call participants". Speaker-only paragraphs
+// ("<strong>Name</strong> -- <em>Title</em>") become SPEAKER_TOKEN + name.
+// Returns null if neither marker is present (not a transcript, or layout
+// changed).
 export function extractTranscriptParagraphs(html: string): string[] | null {
-  const marker = html.search(/<h2[^>]*>\s*Full Conference Call Transcript\s*<\/h2>/i);
-  if (marker < 0) return null;
-  const after = html.slice(marker);
-  // Article body ends at the next major structural boundary; take everything
-  // and rely on paragraph filtering.
+  let start = html.search(/<h2[^>]*>\s*Full Conference Call Transcript\s*<\/h2>/i);
+  let region: string;
+  let classic = false;
+  if (start >= 0) {
+    region = html.slice(start);
+  } else {
+    classic = true;
+    start = html.search(/<h2[^>]*>\s*Prepared Remarks:?\s*<\/h2>/i);
+    if (start < 0) return null;
+    region = html.slice(start);
+    const end = region.search(/<h2[^>]*>\s*Call participants:?\s*<\/h2>/i);
+    if (end > 0) region = region.slice(0, end);
+  }
   const paras: string[] = [];
   const pRe = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
   let m: RegExpExecArray | null;
-  while ((m = pRe.exec(after))) {
-    const t = textOf(m[1]);
+  while ((m = pRe.exec(region))) {
+    const inner = m[1];
+    const sp = classic
+      ? inner.match(/^\s*(?:<[^>]+>\s*)*<strong>\s*([^<]{1,60}?)\s*<\/strong>(?:\s*<\/[^>]+>)*\s*(?:--\s*<em>[^<]*<\/em>\s*)?(?:<[^>]+>\s*)*$/i)
+      : null;
+    if (sp) {
+      paras.push(SPEAKER_TOKEN + textOf(sp[1]));
+      continue;
+    }
+    const t = textOf(inner);
     if (!t) continue;
     // Drop Fool boilerplate that sometimes trails the transcript.
-    if (/^(This article is a transcript|Motley Fool|The Motley Fool|Should you (buy|invest)|Before you buy)/i.test(t)) break;
+    if (/^(This article is a transcript|Motley Fool|The Motley Fool|Should you (buy|invest)|Before you buy|Duration: \d+ minutes|More [A-Z]+ analysis)/i.test(t)) {
+      if (/^Duration|^More/.test(t)) continue;
+      break;
+    }
     paras.push(t);
   }
   return paras.length > 0 ? paras : null;
@@ -134,6 +182,11 @@ export function groupSpeakerTurns(paras: string[]): SpeakerTurn[] {
   const speakerRe = /^((?:[A-Z][\w'.\-]*\s?){1,5}|Operator):\s+(.*)$/;
   let cur: SpeakerTurn | null = null;
   for (const p of paras) {
+    if (p.startsWith(SPEAKER_TOKEN)) {
+      if (cur) turns.push(cur);
+      cur = { speaker: p.slice(SPEAKER_TOKEN.length).trim(), text: "", index: turns.length };
+      continue;
+    }
     const m = p.match(speakerRe);
     if (m && m[1].trim().length <= 40) {
       if (cur) turns.push(cur);
@@ -204,6 +257,7 @@ export async function runTranscriptScrape(opts: { fromYear?: number } = {}): Pro
     const known = new Set((existing ?? []).map((e) => `${e.company_id}|${e.fiscal_period}`));
 
     const now = new Date();
+    const sitemapCache = new Map<string, string>();
     for (const t of TRANSCRIPT_TARGETS) {
       const filerId = idBySlug.get(t.companySlug);
       const subjectId = idBySlug.get(t.subjectSlug);
@@ -219,33 +273,51 @@ export async function runTranscriptScrape(opts: { fromYear?: number } = {}): Pro
           continue;
         }
 
-        let hit: { url: string; html: string; date: Date } | null = null;
-        for (const date of candidateDates(q, year)) {
-          if (date > now) break;
-          await sleep(REQUEST_DELAY_MS);
-          const u = transcriptUrl(t, q, year, date);
-          result.probed++;
-          try {
-            const res = await fetch(u, { headers: { "User-Agent": userAgent } });
-            if (res.status === 200) {
-              hit = { url: u, html: await res.text(), date };
-              break;
-            }
-          } catch (err) {
-            console.warn(`[transcripts] probe ${u}:`, err);
+        // Discovery: monthly sitemap(s) after quarter end.
+        let transcriptUrl: string | null = null;
+        for (const { year: sy, month: sm } of sitemapMonths(q, year)) {
+          if (new Date(Date.UTC(sy, sm - 1, 1)) > now) break;
+          const key = `${sy}-${sm}`;
+          let xml = sitemapCache.get(key);
+          if (xml === undefined) {
+            await sleep(REQUEST_DELAY_MS);
+            result.probed++;
+            const res = await fetch(sitemapUrl(sy, sm), { headers: { "User-Agent": userAgent } });
+            if (res.status === 429) throw new Error("fool.com returned 429 (rate limited); aborting run, retry later");
+            xml = res.ok ? await res.text() : "";
+            if (isBlockedPage(xml)) throw new Error("fool.com is rate-limiting this IP (blocked page served); aborting run");
+            sitemapCache.set(key, xml);
+          }
+          const urls = findTranscriptUrls(xml, t, q, year);
+          if (urls.length > 0) {
+            transcriptUrl = urls[0];
+            break;
           }
         }
-        if (!hit) {
-          console.log(`[transcripts] ${t.label} ${fiscalPeriod}: no transcript found in probe window`);
+        if (!transcriptUrl) {
+          console.log(`[transcripts] ${t.label} ${fiscalPeriod}: no transcript listed in sitemaps ${sitemapMonths(q, year).map((x) => `${x.year}-${String(x.month).padStart(2, "0")}`).join(", ")}`);
           continue;
         }
+
+        await sleep(REQUEST_DELAY_MS);
+        result.probed++;
+        const pageRes = await fetch(transcriptUrl, { headers: { "User-Agent": userAgent } });
+        if (pageRes.status === 429) throw new Error("fool.com returned 429 (rate limited); aborting run, retry later");
+        if (!pageRes.ok) {
+          console.warn(`[transcripts] ${fiscalPeriod}: ${transcriptUrl} HTTP ${pageRes.status}`);
+          result.errors++;
+          continue;
+        }
+        const html = await pageRes.text();
+        if (isBlockedPage(html)) throw new Error("fool.com is rate-limiting this IP (blocked page served); aborting run");
+        const hit = { url: transcriptUrl, html, dateStr: dateFromTranscriptUrl(transcriptUrl) };
         result.found++;
 
         try {
           const paras = extractTranscriptParagraphs(hit.html);
           if (!paras) throw new Error(`${fiscalPeriod}: transcript marker not found (layout change?)`);
           const turns = groupSpeakerTurns(paras);
-          const dateStr = hit.date.toISOString().slice(0, 10);
+          const dateStr = hit.dateStr;
           const prefix = `transcripts/${t.companySlug}/${year}-q${q}`;
 
           await client.storage.from(STORAGE_BUCKET).upload(`${prefix}/page.html`, new TextEncoder().encode(hit.html).buffer as ArrayBuffer, { contentType: "text/html", upsert: true });
@@ -274,7 +346,7 @@ export async function runTranscriptScrape(opts: { fromYear?: number } = {}): Pro
       }
     }
 
-    const msg = `Transcript scrape: ${result.probed} URLs probed, ${result.found} found, ${result.created} events created, ${result.skipped_existing} already known, ${result.errors} errors.`;
+    const msg = `Transcript scrape: ${result.probed} requests, ${result.found} found, ${result.created} events created, ${result.skipped_existing} already known, ${result.errors} errors.`;
     console.log(`[transcripts] ${msg}`);
     await notifySlack(msg, result.errors > 0 ? "warn" : "info");
   } catch (fatal) {
