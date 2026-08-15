@@ -4,16 +4,15 @@ import { Container } from "@/components/ui/Container";
 import { getGlobalLastUpdated } from "@/lib/last-updated";
 import { format } from "date-fns";
 
+// Only routes that exist are linked. Planned sections (financials,
+// earnings, unit economics, safety, outlook) are added here as they ship;
+// linking to a 404 is worse than not linking (3.5).
 const navLinks = [
   { label: "Thesis", href: "/#thesis" },
+  { label: "Trajectory", href: "/#trajectory" },
   { label: "Operations", href: "/#operations" },
   { label: "Milestones", href: "/#milestones" },
-  { label: "Unit Economics", href: "/unit-economics" },
-  { label: "Financials", href: "/financials" },
-  { label: "Earnings", href: "/earnings" },
   { label: "Landscape", href: "/landscape" },
-  { label: "Safety", href: "/safety" },
-  { label: "Outlook", href: "/outlook" },
 ];
 
 interface PageShellProps {

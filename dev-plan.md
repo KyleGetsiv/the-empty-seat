@@ -48,8 +48,8 @@ One open item: `CLAUDE.md` pins the extraction model to `claude-sonnet-4-2025051
 | v2 phase | Content | v1 origin | Ships publicly |
 |---|---|---|---|
 | 0, 1 | Foundation; Thesis and Operations | v1 Phases 0, 1 | Done (deployed, unannounced) |
-| 2 | Re-entry and freshness | New | Yes (deploy; still unannounced) |
-| 3 | Competitive landscape | v1 Phase 5, expanded | Yes (deploy; still unannounced) |
+| 2 | Re-entry and freshness | New | Built 2026-08-15 (deploy; still unannounced) |
+| 3 | Competitive landscape | v1 Phase 5, expanded | Built 2026-08-15 (deploy; still unannounced) |
 | 4 | Financials and the extraction engine | v1 Phases 3 and 4, merged and resequenced | Yes (deploy; still unannounced) |
 | 5 | Launch | v1 Phase 8 subset plus `pre-launch.md` | The announcement |
 | 6 | Unit economics | v1 Phase 2 | Post-announce |
@@ -294,6 +294,8 @@ competitor_snapshots
 ### 3.5 Ship checkpoint
 
 **Do**: deploy, verify all Phase 3 acceptance criteria, update `architecture.md` and `pre-launch.md`, notify user for review. No announcement.
+
+(Done 2026-08-15: nav trimmed to routes that exist (Trajectory added, five unbuilt sections removed until they ship); pre-launch.md gains placeholder-copy sweep, snapshot freshness, and types regeneration items. Phase 3 is code-complete pending the user's local steps: push, `supabase db push` for 0010 and 0011, run the three seed scripts and the scraper (which now also backfills Zoox pilot quarters), regenerate types.)
 
 ---
 

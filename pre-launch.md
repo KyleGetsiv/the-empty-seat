@@ -29,6 +29,18 @@ context.
 - [ ] **Magic-link click-through retest.** After the custom domain swap,
   re-verify admin magic-link login end-to-end against the new domain.
 
+- [ ] **Placeholder copy sweep.** Every `// TODO: user to replace`
+  block and every seeded `site_content` key (thesis_paragraphs,
+  methodology_body, landscape_intro, landscape_china,
+  landscape_regulatory, landscape_methodology) reviewed and finalized
+  via `/admin/site-content`. Added 3.5.
+- [ ] **Competitor snapshot freshness.** Every `competitor_snapshots`
+  row less than one quarter old at launch; Apollo Go and Pony.ai refreshed
+  after their 2026-08-18 Q2 earnings. Added 3.5.
+- [ ] **Types regeneration.** `supabase gen types typescript --linked >
+  lib/supabase/types.ts` run and committed after all migrations through
+  0011 are pushed. Added 3.5.
+
 ## Open
 
 Add new items here as they surface between now and launch.

@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 3.4
+Module: 3.5
 Date: 2026-08-15
-Commit: 3.4 work
+Commit: 3.5 work
 
 ---
 
@@ -236,7 +236,9 @@ also revalidates /methodology/sources; site-content revalidates
 ### components/sections/
 
 - **PageShell:** async server component; sticky nav and footer with
-  "Last updated" from `getGlobalLastUpdated()`. Methodology as meta-link.
+  "Last updated" from `getGlobalLastUpdated()`. Nav links only routes
+  that exist (Thesis, Trajectory, Operations, Milestones, Landscape;
+  Methodology as meta-link); planned sections are added as they ship.
 - **ThesisHero:** hero with animated ride count (ThesisHeroCounter,
   client, Framer Motion). Prefers `getLatestDisclosedWeeklyRides()` over
   CPUC; caption reflects which. Serif pending state when both null.
@@ -433,14 +435,10 @@ the magic-link prod retest deferred since 1.6.
 - Magic-link prod click-through never re-verified since 1.6 (user task).
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded
   (site_content, operator_program_roles). See CLAUDE.md.
-- `is_published` DB-level ISR trigger not wired; admin mutation
-  revalidation covers it.
-- City detail pages not built; timeline shows disabled links.
-- `service_area_geojson` exists but unused; polygon rendering deferred.
-- Public routes /financials, /earnings, /safety, /outlook,
-  /unit-economics are still stubs.
-- Resolved in Phase 2 (kept for history): companies delete-confirm,
-  revalidatePath gaps, site_content YAML disclosed-metrics convention.
+- `is_published` DB-level ISR trigger not wired; admin revalidation covers.
+- City detail pages not built; `service_area_geojson` unused.
+- Planned routes not yet built (and unlinked from nav until they are):
+  /financials, /earnings, /safety, /outlook, /unit-economics.
 - Quantitative series are CA-only until 2.3 (national disclosed metrics)
   lands; pre-2025 CPUC baseline deferred to Phase 4.
 - CPUC incident_metrics not ingested; safety-phase territory.
