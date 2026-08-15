@@ -72,32 +72,29 @@ function SourceLink({
   );
 }
 
-// Filled dot: company-disclosed.
-function CompanyDot(props: {
+type DotProps = {
   cx?: number;
   cy?: number;
   value?: number | null;
   payload?: DisclosedChartPoint;
-}) {
-  const { cx, cy, payload } = props;
+};
+
+// Filled dot: company-disclosed. Rendered both as the resting dot and as
+// the hover "active" dot (Recharts overlays the active dot on top, so it
+// must be a link too or clicks never reach the resting dot underneath).
+function CompanyDot(props: DotProps & { r?: number }) {
+  const { cx, cy, payload, r = 5.5 } = props;
   if (cx == null || cy == null || payload?.company == null) return null;
   return (
-    <SourceLink
-      href={payload.sourceUrl}
-      label={`Source for ${payload.dateLabel} disclosure`}
-    >
-      <circle cx={cx} cy={cy} r={5.5} fill={ACCENT} stroke="none" />
+    <SourceLink href={payload.sourceUrl} label={`Source for ${payload.dateLabel} disclosure`}>
+      <circle cx={cx} cy={cy} r={r} fill={ACCENT} stroke="none" />
     </SourceLink>
   );
 }
 
 // Open dot: third-party figure.
-function ThirdPartyDot(props: {
-  cx?: number;
-  cy?: number;
-  payload?: DisclosedChartPoint;
-}) {
-  const { cx, cy, payload } = props;
+function ThirdPartyDot(props: DotProps & { r?: number }) {
+  const { cx, cy, payload, r = 5.5 } = props;
   if (cx == null || cy == null || payload?.thirdParty == null) return null;
   return (
     <SourceLink
@@ -107,7 +104,7 @@ function ThirdPartyDot(props: {
       <circle
         cx={cx}
         cy={cy}
-        r={5.5}
+        r={r}
         fill="var(--color-background)"
         stroke={ACCENT}
         strokeWidth={2}
@@ -137,10 +134,7 @@ function CustomTooltip({
         {p.statedBy ? `: ${p.statedBy}` : ""}
       </p>
       {p.sourceUrl && (
-        <p className="text-accent mt-1.5 text-xs">
-          Click the dot to open the source
-          {p.sourcePublisher ? ` (${p.sourcePublisher})` : ""}
-        </p>
+        <p className="text-accent mt-1.5 text-xs">Click the dot for source</p>
       )}
     </div>
   );
@@ -153,13 +147,29 @@ export function DisclosedRidesChart({ points }: { points: DisclosedChartPoint[] 
   const tMax = points[points.length - 1].t;
   const pad = (tMax - tMin) * 0.04;
 
+  // Fallback: a click anywhere on the chart surface while a point is
+  // active opens that point's source. Covers any Recharts layer that might
+  // intercept the dot links themselves.
+  function handleChartClick(state: { activeIndex?: number | string | null | undefined }) {
+    const idx =
+      typeof state?.activeIndex === "number"
+        ? state.activeIndex
+        : typeof state?.activeIndex === "string"
+          ? parseInt(state.activeIndex, 10)
+          : NaN;
+    if (Number.isNaN(idx)) return;
+    const p = points[idx];
+    if (p?.sourceUrl) window.open(p.sourceUrl, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <div>
-      <div className="h-80 w-full">
+      <div className="h-80 w-full [&_.recharts-wrapper]:cursor-pointer">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={points}
             margin={{ top: 16, right: 24, bottom: 8, left: 16 }}
+            onClick={handleChartClick}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
@@ -200,19 +210,14 @@ export function DisclosedRidesChart({ points }: { points: DisclosedChartPoint[] 
               strokeWidth={2}
               connectNulls
               dot={<CompanyDot />}
-              activeDot={{ r: 7, fill: ACCENT, strokeWidth: 0 }}
+              activeDot={<CompanyDot r={7} />}
               isAnimationActive={false}
             />
             <Line
               dataKey="thirdParty"
               stroke="none"
               dot={<ThirdPartyDot />}
-              activeDot={{
-                r: 7,
-                fill: "var(--color-background)",
-                stroke: ACCENT,
-                strokeWidth: 2,
-              }}
+              activeDot={<ThirdPartyDot r={7} />}
               isAnimationActive={false}
             />
           </ComposedChart>

@@ -58,7 +58,7 @@ export async function NationalTrajectory() {
             <DisclosedRidesChart points={points} />
 
             <p className="mt-6 text-xs text-muted max-w-2xl leading-relaxed">
-              Each dot is a public disclosure; click it to open the source, or
+              Each dot is a public disclosure; click the dot for source, or
               browse the{" "}
               <a
                 href="/methodology/sources"
