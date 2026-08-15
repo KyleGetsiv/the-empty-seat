@@ -1,883 +1,418 @@
-# The Empty Seat: Development Plan
+# The Empty Seat: Development Plan v2
+
+Revised 2026-08-15. Supersedes the v1 plan (preserved in git history; last v1 revision was commit 52adb78).
 
 ## Purpose of this document
 
-This is the build specification for a site called **The Empty Seat**, a research-grade website about Waymo. Claude Code will use this document to build the site. Treat it as the source of truth for scope, sequencing, and acceptance criteria. If something here is ambiguous, surface the question rather than guessing.
+This is the build specification for resuming The Empty Seat after a hiatus (last commit 2026-05-03). It is the source of truth for scope, sequencing, and acceptance criteria going forward. Phases 0 and 1 of the v1 plan are complete and shipped to Vercel (unannounced, behind the noindex gate); `architecture.md` is the accurate snapshot of what exists. If something here is ambiguous, surface the question rather than guessing.
 
-The site does not exist yet. This is a greenfield build in a new repo. There is no legacy code, no migration, no existing content to import. Any content beyond what is specified in this document (specific milestone entries, specific city launch dates, specific financial figures) will be provided by the user and entered through the admin UI after the relevant phase ships. Seed data for initial development can be fabricated placeholder values clearly marked as such.
+Unlike v1, this is not a greenfield spec. Read `CLAUDE.md` and `architecture.md` before any module.
+
+## What changed since v1 (project decisions, August 2026)
+
+Three decisions reshape the plan:
+
+1. **Scope broadens to the AV landscape, Waymo stays the flagship.** v1 was strictly Waymo-only on the public surface. Since then Zoox has begun charging the public for rides (Las Vegas, August 10, 2026, the first paid robotaxi service in the US besides Waymo), Tesla operates in seven metros (with heavy caveats), and the Chinese operators are scaling internationally. The site keeps its Waymo depth and adds a strong competitive landscape section: the "Waymo deep + landscape page" structure. No per-competitor deep pages, no company switcher.
+
+2. **The announce bar is defined.** The site is deployed but unannounced. It goes public when three things are true: (a) nothing on the site is visibly stale, (b) the financials section with the implied Waymo P&L exists, (c) multi-operator coverage exists so the site matches its "AV deployment tracking" framing. Unit economics, safety, and outlook move post-announce.
+
+3. **Automation is prioritized.** The owner works at an opportunistic pace with gaps between sessions. The failure mode observed in the May-August hiatus is data staleness, not missing features. Scrapers and the extraction pipeline are therefore load-bearing infrastructure, not conveniences: anything that must stay fresh quarterly should refresh itself and flag failures in Slack.
 
 ## Audience and positioning
 
-The site targets two reader segments:
+Unchanged in substance from v1:
 
-1. **Growth and crossover investors** evaluating Waymo as an investment (directly via secondaries, or indirectly via Alphabet). These readers want unit economics, implied P&L, valuation framework, and competitive positioning. They are sophisticated readers of financial documents and want primary sources linked.
+1. **Growth and crossover investors** evaluating Waymo (directly via secondaries, or via Alphabet) who want unit economics, implied P&L, valuation framework, and competitive positioning with primary sources linked.
+2. **Operators and strategists at AV companies** benchmarking against Waymo. The landscape section now serves this segment directly rather than incidentally.
 
-2. **Operators and strategists at competitive AV companies** (Tesla Robotaxi, Zoox, Pony, WeRide, Baidu Apollo) who want to benchmark against Waymo. They care about operational metrics, scaling curves, and technical milestones.
-
-The site is Waymo-only in its public surface. A multi-company data backend exists so competitor data can be referenced in comparative sections, but no competitor gets their own landing page.
-
-## Positioning vs. comparable sites
-
-Two reference sites inform the design direction. Claude Code will not have access to these sites, so they are described below rather than linked.
-
-**Humanity's Last Machine** (the aesthetic reference): a long-form research essay about humanoid robotics hardware, presented as a scrollytelling web document. Editorial typography (serif display type, generous whitespace), restrained color palette, one idea per scroll section, tasteful motion on data entering the viewport. A persistent navigation allows jumping between sections. It reads like a book you can live inside, not a dashboard. The Empty Seat should feel similar: an essay with embedded live data, not a dashboard with marketing copy bolted on.
-
-**Robotaxi Tracker** (the operational data reference): a third-party site that tracks real-time AV operational metrics (fleet sizes, active vehicle counts, ride volumes by city, wait times). The Empty Seat will consume data from Robotaxi Tracker as an input to its operations section, with visible attribution, but will not replicate its dashboard-style presentation. Robotaxi Tracker is the commodity data layer; The Empty Seat is the research layer built on top.
+Positioning line, updated: The Empty Seat is Waymo research first, with the competitive field tracked at disclosed-data fidelity around it. Robotaxi Tracker and The Charge Port are the commodity live-dashboard layer; The Empty Seat is the research layer: sourced, editorial, and opinionated about what the numbers mean.
 
 ## Guiding principles
 
-1. **Research over dashboard.** Every chart has a narrative around it. Raw data without framing is not the product.
-2. **Primary sources always linked.** Every non-trivial data point traces to a source row in the database. Trust is the product.
-3. **Tooltips everywhere.** Every metric, acronym, and methodology assumption gets a hoverable explanation. Build the tooltip system in Phase 0 and use it in every subsequent phase.
-4. **Static where possible, dynamic where necessary.** Aggressive ISR with revalidation on admin writes. Don't make things dynamic without a reason.
-5. **Ship vertical slices.** Each phase that has a public face ships independently. Every ship is a distribution moment.
-6. **Admin UX matters.** If annotating data is painful, the site goes stale. Budget 20% of every phase for admin ergonomics.
-7. **Multi-company data, single-company site.** Every data table includes a `company_id` foreign key. The public frontend is Waymo-only. Do not build generic "company page" components or a company switcher UI in any phase covered by this plan.
-8. **Disclosed sources, not community-tracked.** The site's quantitative claims rest on primary regulatory and corporate disclosures (SEC filings, state PUC quarterly reports, official Waymo communications). Community-tracked or estimated data sources are referenced as outbound links for readers wanting live granularity, not ingested as backend data. The audience is sophisticated readers of financial documents; they want sources they can verify, not aggregator dashboards.
+Principles 1 through 6 and 8 carry over from v1 verbatim (research over dashboard; primary sources always linked; tooltips everywhere; static where possible; ship vertical slices; admin UX matters; disclosed sources, not community-tracked). Principle 7 is amended:
 
-## Tech stack (fixed, do not substitute)
+7. **Multi-company data, Waymo-deep frontend.** Every data table keeps its `company_id` foreign key. Waymo remains the only company with full-site depth. Competitors appear in the landscape section and in explicitly comparative modules. Do not build per-company deep pages or a company switcher UI. Landscape components should render gracefully when a competitor discloses almost nothing, because most disclose almost nothing; sparse data handling is a first-class design requirement, not an edge case.
 
-- **Frontend**: Next.js 16 (App Router, `proxy.ts` not `middleware.ts`), TypeScript, Tailwind CSS v4 (CSS-based `@theme` config in `app/globals.css`, no `tailwind.config.ts`), Recharts, Framer Motion
-- **Hosting**: Vercel
-- **Database**: Supabase (Postgres, Auth, Storage in a single project)
-- **Background jobs**: Vercel Cron for lightweight scheduled tasks, GitHub Actions for heavier scrapes
-- **LLM extraction**: Anthropic API (Claude Sonnet 4, model string `claude-sonnet-4-20250514`) for structured extraction from filings and transcripts
-- **Admin auth**: Supabase Auth, single admin user, magic link login
-- **Maps**: Mapbox GL JS for interactive service area maps
-- **Tooltip primitive**: Radix UI Tooltip
-- **Form primitives**: Radix UI plus uncontrolled React state for simple forms
-- **Monitoring**: Vercel logs plus a Slack incoming webhook for scraper failures
+One principle is added:
 
-If a task appears to require a substitution (e.g., a package unavailable, an API deprecated), surface the question before installing an alternative.
+9. **Confidence labeling is non-negotiable in comparative contexts.** Waymo's CPUC numbers, Zoox's CPUC pilot filings, Baidu's earnings disclosures, and Tesla's marketing claims are not the same kind of fact. Every comparative figure carries its confidence level and source type visibly, not just in a tooltip. The site's edge is that it does not launder low-quality numbers into tables next to high-quality ones.
 
-## Repo layout
+## Tech stack
 
-```
-/app                    Next.js App Router routes
-  /(public)             Public marketing + content routes
-    /page.tsx           Landing page (Thesis + Operations stacked)
-    /financials/page.tsx
-    /earnings/page.tsx
-    /landscape/page.tsx
-    /safety/page.tsx
-    /outlook/page.tsx
-    /methodology/page.tsx
-  /admin                Admin routes (behind auth)
-    /layout.tsx         Auth gate + admin nav
-    /milestones/page.tsx
-    /cities/page.tsx
-    ...
-  /api                  Route handlers (scraper webhooks, admin mutations)
-/components
-  /ui                   Primitives (Tooltip, Metric, Term, Button, etc.)
-  /charts               Chart wrappers around Recharts
-  /sections             Page-level sections (ThesisHero, OperationsTimeline, etc.)
-  /admin                Admin-specific components
-/lib
-  /supabase             Supabase client setup (server + browser + admin)
-  /scrapers             Scraper modules (one file per source); see lib/scrapers/cpuc.ts for the canonical pattern
-  /extraction           Anthropic extraction pipeline
-  /glossary             Central glossary data for tooltips
-  /utils
-/scripts                One-off scripts (seed, backfill, etc.)
-/supabase
-  /migrations           SQL migrations
-  /seed.sql             Seed data
-/public                 Static assets
-```
+Unchanged from v1 and from `CLAUDE.md` (Next.js 16 App Router with `proxy.ts`, TypeScript, Tailwind v4 via `@theme` in `globals.css`, Recharts, Framer Motion, Vercel, Supabase, Vercel Cron plus GitHub Actions, Mapbox GL JS, Radix UI, Slack webhook monitoring). Do not substitute without asking.
 
-Create this layout in Phase 0.1. Subsequent phases add files within it.
+One open item: `CLAUDE.md` pins the extraction model to `claude-sonnet-4-20250514`, chosen in April 2026. Before Phase 4 begins, check the current Anthropic model lineup and propose the best price-appropriate model for structured extraction; update `CLAUDE.md` with the user's approval. This is a surfaced decision, not a silent substitution.
+
+## Phase map: v1 to v2
+
+| v2 phase | Content | v1 origin | Ships publicly |
+|---|---|---|---|
+| 0, 1 | Foundation; Thesis and Operations | v1 Phases 0, 1 | Done (deployed, unannounced) |
+| 2 | Re-entry and freshness | New | Yes (deploy; still unannounced) |
+| 3 | Competitive landscape | v1 Phase 5, expanded | Yes (deploy; still unannounced) |
+| 4 | Financials and the extraction engine | v1 Phases 3 and 4, merged and resequenced | Yes (deploy; still unannounced) |
+| 5 | Launch | v1 Phase 8 subset plus `pre-launch.md` | The announcement |
+| 6 | Unit economics | v1 Phase 2 | Post-announce |
+| 7 | Safety | v1 Phase 6 | Post-announce |
+| 8 | Outlook, polish, distribution | v1 Phases 7 and 8 remainder | Post-announce |
+
+v1 Phases 2 through 8 as originally written are superseded by this document. Where a v2 module says "as specified in v1", the v1 text (in git history) remains the reference for that module's detail.
+
+Commit prefix convention continues: `feat(2.1)`, `fix(3.2)`, etc., referring to v2 phase numbers. No commits were ever made against v1 phases 2+, so there is no numbering collision.
 
 ---
 
-## Phase 0: Foundation
+## State of the world briefing (August 2026)
 
-**Ships publicly**: no. Foundation only.
+Research summary compiled 2026-08-15 from primary and secondary sources. This section exists so modules below can reference verified facts, and so data entry in Phases 2 and 3 starts from sourced values rather than memory. Every item here should still be re-verified against its primary source at data-entry time; items flagged UNVERIFIED must not enter the database without confirmation.
 
-**Goal**: stand up the infrastructure every later phase depends on. Database, design system, admin shell, tooltip system.
+### Waymo
 
-### 0.1 Project scaffold
+- Weekly paid rides: 500,000+, first disclosed ~2026-03-27, reaffirmed on the Alphabet Q1 call (2026-04-29) and again ~2026-07-08. No higher figure has been disclosed since; one analyst notes the figure has held flat across four disclosures while the city count grew, implying declining per-vehicle utilization (editorially interesting; see Phase 2.4). Target: 1M weekly rides by end of 2026.
+- Cumulative paid trips: 20M+ (Electrek, 2026-07-08; single source, treat as UNVERIFIED until corroborated). Rider-only miles: 220.6M through March 2026.
+- Fleet: ~3,500 to 4,000 vehicles (sources conflict; "close to 4,000" is the most recent, 2026-08-11).
+- Funding: $16B round at a $126B post-money valuation, led by Alphabet, announced 2026-02-02.
+- Cities serving riders (11): Phoenix, SF Bay Area, LA, Miami, Orlando, Dallas (all open access; Dallas waitlist dropped 2026-08-04), Austin and Atlanta (Uber app exclusive; exclusivity ends Jan 2028, announced 2026-07-24), Houston and San Antonio (waitlist), Nashville (public since 2026-04-07, in partnership with Lyft; open-vs-waitlist status UNVERIFIED).
+- Employee-only driverless operations, public "soon" (announced 2026-07-08): Las Vegas, Denver, San Diego, Tampa.
+- Announced/testing: Washington DC (delayed, regulatory limbo), Detroit, Sacramento (CPUC approval 2026-08-14 along with San Diego and enlarged Bay Area and LA territories, 18 counties), plus a long announced list (Baltimore, Boston, Charlotte, Chicago, Minneapolis, New Orleans, New York, Philadelphia, Pittsburgh, Portland, Seattle, St. Louis). International: Tokyo (testing, not serving riders), London (testing since 2026-04-14, commercial targeted 2026).
+- Freeway service: launched Nov 2025 (Phoenix, SF, LA), suspended May 2026 after 13 construction-zone incidents, resumed 2026-07-29 starting with Phoenix. The June OTA fix was Waymo's sixth software recall (3,871 vehicles). Airports: SFO since 2026-01-29, Sky Harbor restored 2026-07-29.
+- Uber relationship: Phoenix pilot quietly ended May 2026; Austin/Atlanta exclusivity ends Jan 2028 with Waymo launching its own app there.
+- Open probes: NHTSA PE26001 and an NTSB school-bus probe (opened Jan 2026); current status UNVERIFIED.
 
-**Do**:
-- Run `npx create-next-app@latest . --typescript --tailwind --app --eslint --src-dir=false --import-alias="@/*"` in the empty repo root
-- Create the repo directory layout listed above (empty files/folders as placeholders where appropriate)
-- Install additional dependencies: `@supabase/supabase-js`, `@supabase/ssr`, `recharts`, `framer-motion`, `@radix-ui/react-tooltip`, `@radix-ui/react-dialog`, `@radix-ui/react-dropdown-menu`, `mapbox-gl`, `date-fns`, `zod`
-- Configure `next.config.js` for image optimization and any required remote patterns
-- Set up `.env.local.example` documenting all required environment variables (do not commit `.env.local` itself):
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `ANTHROPIC_API_KEY`
-  - `NEXT_PUBLIC_MAPBOX_TOKEN`
-  - `SLACK_WEBHOOK_URL`
-  - `SCRAPER_USER_AGENT`
-- Create a minimal `README.md` describing the project in one paragraph and linking to `dev-plan.md` and `CLAUDE.md`
+### CPUC (the site's primary Waymo data source)
 
-**Acceptance**: `npm run dev` starts without errors, renders a blank placeholder page, `npm run lint` passes, directory structure matches the spec above.
+- Program active, two tracks (Deployment: Waymo; Pilot: Aurora, Tensor, Waymo, WeRide, Zoox). Most recent published quarter: Q1 2026. Q2 2026 reports were due 2026-08-01 and were not yet posted as of 2026-08-15; expect them imminently.
+- Note for Phase 3: Zoox files in the CPUC Pilot Program. That is a disclosed, primary source for Zoox California activity, the same class of source the site already trusts for Waymo.
 
-### 0.2 Database schema
+### Zoox (Amazon)
 
-**Do**:
-- Set up a Supabase project (user will provide credentials or create the project; ask if not provided)
-- Write the initial migration as `supabase/migrations/0001_initial_schema.sql` with these tables:
+- First paid service: Las Vegas, 2026-08-10, via Zoox app, no waitlist. Preceded by ~11 months of free public rides. Geofence includes the Strip, LVCC, Sphere, T-Mobile Arena, Harry Reid airport (sq mi UNVERIFIED).
+- SF: free rides, waitlist-gated (Explorers program), expanded footprint spring 2026. Paid service requires CPUC/DMV deployment permits Zoox does not yet hold. Austin: free rides operating. Miami, LA (Uber partnership, mid-2027), Dallas, Phoenix: announced/testing.
+- Regulatory: NHTSA exemption granted 2026-07-30 for the purpose-built vehicle (no steering wheel), capped at 2,500 vehicles/year for two years. Fourth recall July 2026 (105 vehicles, which roughly indicates purpose-built fleet size).
+- Ride volume: "350,000+ passengers" Las Vegas as of March 2026 (single source, UNVERIFIED).
 
-```
-companies
-  id uuid pk
-  slug text unique                   e.g. 'waymo', 'tesla', 'zoox'
-  display_name text
-  founded_year int
-  parent_company text                e.g. 'Alphabet' for Waymo
-  created_at, updated_at
+### Tesla
 
-sources
-  id uuid pk
-  url text
-  publisher text                     e.g. 'SEC', 'Motley Fool', 'Waymo Blog'
-  title text
-  published_at timestamp
-  scraped_at timestamp
-  content_hash text                  for dedupe
-  storage_key text                   for raw document in Supabase Storage
-  created_at
+- Operating in 7 metros: Austin, Dallas, Houston, Miami, Orlando, Tampa, SF Bay Area. The critical distinctions: the Bay Area service uses a safety driver in every car and legally is not an AV service at all (Tesla operates under a TCP charter permit; CPUC stated in March 2026 that the person in the car "is the driver"). Tesla holds no CPUC/DMV AV deployment permits and files no California AV data.
+- Scale reality check: active unsupervised fleet ~21 vehicles at end of Q2 2026 per Tesla's own chart data; ~2.4-2.5M cumulative paid miles (including supervised Bay Area); Q2 paid miles roughly flat vs Q1 and declining within the quarter. Musk claims 10% weekly growth; the chart contradicts it. 380K+ cumulative unsupervised miles claimed with "0 notable incidents."
+- Texas: driverless authorization under the new TxDMV framework 2026-05-28, 42 Model Ys registered (vs Waymo's 577 in Texas). Cybercab: volume production began Q2 2026, slow ramp, none in public service. Next markets named: Las Vegas, Phoenix, New Orleans. NHTSA investigation (opened June 2025) status UNVERIFIED.
 
-cities
-  id uuid pk
-  company_id uuid fk -> companies
-  name text                          e.g. 'San Francisco'
-  metro_area text                    e.g. 'San Francisco Bay Area'
-  country text                       default 'US'
-  launch_date date
-  public_access_date date             null if still waitlisted
-  service_area_sq_mi numeric
-  status text                         'announced' | 'waitlist' | 'public' | 'paused'
-  latitude numeric
-  longitude numeric
-  notes text
-  created_at, updated_at
+### China operators
 
-milestones
-  id uuid pk
-  company_id uuid fk
-  event_date date
-  headline text
-  body text                          markdown
-  tags text[]                         e.g. ['new_city', 'technology', 'international']
-  source_id uuid fk -> sources
-  kyle_annotation text                user's 1-sentence take
-  is_published boolean default false
-  created_at, updated_at
+- Baidu Apollo Go: 3.2M fully driverless rides Q1 2026 (weekly peak 350K+ in March, i.e., comparable weekly volume to Waymo, at lower fares), 22M cumulative rides, 27 cities. Dubai commercial fully driverless since 2026-03-30 (with Uber and Apollo Go apps). Switzerland (AmiGo with PostBus, safety operators, June 2026), London road testing (2026-07-28), Hong Kong right-hand-drive trial, Abu Dhabi permit. RT6 vehicle cost ~$28,350. Wuhan mass outage 2026-03-31 (~100 vehicles frozen simultaneously) triggered a nationwide new-permit freeze April through late July 2026; permits resumed ~2026-07-23; Wuhan restarted with safety drivers. Q2 2026 earnings due 2026-08-18 (three days after this writing) and will show the freeze's impact.
+- Pony.ai: fleet 1,700+ (May 2026), target 3,500+ by end-2026; Q1 2026 robotaxi revenue +395% YoY (small base, ~$8M); claims city-level per-vehicle unit-economics breakeven in Guangzhou (Gen-7); fully driverless commercial in all four Chinese tier-1 cities; operating in Croatia (Zagreb, billed as Europe's first commercial robotaxi), Qatar, Singapore, South Korea; announced 2,000+ robotaxis across five European cities with Uber (2026-08-14). Claims vehicle cost 1/4 to 1/5 of Waymo's. Q2 earnings due 2026-08-18.
+- WeRide: Q2 2026 (reported 2026-08-12) revenue RMB 231.7M (+82% YoY), ~1,800 robotaxis domestic plus ~400 overseas, Middle East 200+; fully driverless commercial in Abu Dhabi (claims Abu Dhabi unit-economics breakeven after removing safety officers) and Dubai (via Uber, 2026-03-31); Riyadh with safety operators; committed with Uber to 1,200+ robotaxis across the Middle East; guidance: operating cash flow positive quarter in 2028, breakeven 2029.
+- Didi: 24/7 driverless trials Guangzhou/Beijing, R2 vehicle 2026, UAE pilot announced; no meaningful disclosures yet.
+- Market frame: Goldman ~500K robotaxis in China by 2030, ~$47B China market by 2035 (headline-level verification only).
 
-fleet_snapshots
-  id uuid pk
-  company_id uuid fk
-  city_id uuid fk                     nullable if company-wide
-  snapshot_date date
-  vehicle_count int
-  active_vehicle_count int            nullable
-  source_id uuid fk
-  notes text
-  created_at
+### Other US operators (for landscape completeness)
 
-ride_estimates
-  id uuid pk
-  company_id uuid fk
-  city_id uuid fk                     nullable if company-wide
-  period_start date
-  period_end date
-  rides_per_week int                  normalized to weekly even if period differs
-  avg_fare_usd numeric                 nullable
-  source_id uuid fk
-  confidence text                      'high' | 'medium' | 'low'
-  methodology_note text
-  created_at
+- Avride: commercial in Dallas on Uber app since Dec 2025, safety operator onboard. May Mobility: driver-out low-speed service Atlanta metro; Arlington TX on Uber. Motional: supervised Las Vegas pilot on Uber, driverless targeted end-2026. Nuro+Lucid+Uber: pre-launch (Bay Area testing; Houston targeted mid-2027). Cruise: still dead (shut down Dec 2024). Uber is the common rail for nearly every non-Waymo operator; Lyft has Waymo (Nashville) and Freenow/Baidu in Europe.
 
-financial_periods
-  id uuid pk
-  company_id uuid fk
-  fiscal_period text                   e.g. 'Q1 2026', 'FY 2025'
-  period_start date
-  period_end date
-  revenue_usd numeric                  nullable
-  opex_usd numeric                     nullable
-  capex_usd numeric                    nullable
-  operating_loss_usd numeric           nullable
-  is_disclosed boolean                 true if from filing, false if estimated
-  source_id uuid fk
-  methodology_note text
-  created_at, updated_at
+### Alphabet financials (for Phase 4)
 
-audit_log
-  id uuid pk
-  user_id uuid                        nullable
-  table_name text
-  record_id uuid
-  action text                          'insert' | 'update' | 'delete'
-  before jsonb
-  after jsonb
-  created_at
-```
-
-- Add row-level security policies: anon users can `SELECT` from `companies`, `cities`, `milestones` (where `is_published = true`), `fleet_snapshots`, `ride_estimates`, `financial_periods`, `sources`. All write operations require authenticated role with an `is_admin` claim.
-- Create triggers on every table (except `audit_log`) that write before/after state to `audit_log` on mutations.
-- Seed data in `supabase/seed.sql`:
-  - Insert one row into `companies` for Waymo (slug 'waymo')
-  - Insert stub rows for Tesla, Zoox, Pony AI, WeRide, Baidu Apollo (for future use; these are not surfaced in the Waymo-only frontend yet)
-  - Do not seed cities, milestones, or other data; the user will enter these via admin UI after Phase 0 ships
-
-**Acceptance**: migrations run cleanly against a fresh Supabase project, RLS policies verified by attempting an unauthenticated write and seeing it fail, seed script runs and `companies` table has six rows.
-
-### 0.3 Supabase client setup
-
-**Do**:
-- Create `lib/supabase/server.ts` (for server components, uses cookies), `lib/supabase/browser.ts` (for client components), and `lib/supabase/admin.ts` (service-role, server-only, for scraper jobs and admin mutations)
-- Create TypeScript types generated from the database schema (use `supabase gen types typescript` pattern, committed to `lib/supabase/types.ts`)
-- Document in a comment at the top of each client which contexts may use it (e.g., "DO NOT import admin.ts from client components")
-
-**Acceptance**: a sample server component can fetch from `companies` table and render it; a sample client component can subscribe to realtime on a table; attempting to import `admin.ts` from a client component produces a build error or clear runtime error.
-
-### 0.4 Design system
-
-**Do**:
-- Configure Tailwind with a custom theme in `tailwind.config.ts`:
-  - Fonts: a serif for display (suggest Fraunces or Instrument Serif, loaded via `next/font/google`) and a sans for body (suggest Inter)
-  - Color palette: off-white background (`#FAFAF7`), near-black text (`#0A0A0A`), one restrained accent color (suggest a deep blue or forest green, ~`#1E3A5F`), and a muted secondary for supporting text
-  - Typography scale: generous, editorial (body 18px, display up to 72px)
-  - Spacing: generous whitespace (Humanity's Last Machine reference point; think book-like margins)
-- Create primitive components in `components/ui/`:
-  - `<Container>`: max-width wrapper with consistent horizontal padding
-  - `<Prose>`: styled wrapper for body text (sets font, line height, paragraph spacing)
-  - `<Heading>`: serif display headings, takes `level` prop
-  - `<Button>`: two variants (primary, ghost)
-  - `<Card>`: subtle border, consistent radius and padding
-- Create a `components/sections/PageShell.tsx` that wraps every public page with global nav and footer
-- Global nav: sticky top bar with the site name "The Empty Seat" and section anchors (Thesis, Operations, Unit Economics, Financials, Earnings, Landscape, Safety, Outlook). Even if most sections are stubs until their phase ships, the nav anchors them
-- Footer: methodology link, disclaimer ("The Empty Seat is an independent research project. Not affiliated with Waymo, Alphabet, or any mentioned company. Not investment advice."), contact link, last-updated global timestamp
-
-**Acceptance**: a placeholder homepage renders with the shell, nav, and footer, matching the editorial aesthetic. `npm run build` succeeds.
-
-### 0.5 Tooltip system
-
-**Do**:
-- Create `components/ui/Tooltip.tsx` wrapping Radix UI Tooltip with project styling (subtle shadow, consistent arrow, appropriate delay, mobile tap-to-reveal behavior)
-- Create `components/ui/Metric.tsx`: renders a numeric value with a small info icon next to it; tooltip content explains the calculation, cites the source, and shows the "as of" date. Takes props: `value`, `unit`, `explanation`, `sourceUrl`, `asOf`
-- Create `components/ui/Term.tsx`: inline wrapper for glossary terms. Renders children with a dotted underline, shows glossary definition on hover. Takes a `term` prop that looks up the definition from the glossary
-- Create `lib/glossary/index.ts` exporting a typed glossary object. Each entry: `{ term: string; shortDefinition: string; longDefinition?: string; seeAlso?: string[] }`. Seed with foundational terms:
-  - disengagement rate
-  - contribution margin
-  - autonomous miles
-  - rider-only miles
-  - remote assist
-  - safety driver
-  - service area
-  - ODD (operational design domain)
-  - 6th-generation Waymo Driver
-  - Other Bets (Alphabet segment)
-  - capex intensity
-  - unit economics
-- Definitions should be written in an editorial, plain-English voice. No em dashes. One to three sentences per term.
-- Mobile behavior: tap to reveal, tap elsewhere to dismiss, auto-dismiss after 8 seconds
-
-**Acceptance**: all three components render correctly on desktop and mobile, the glossary is centralized (editing a term in one place updates every occurrence), accessibility is sound (ARIA attributes, keyboard navigable).
-
-### 0.6 Admin shell
-
-**Do**:
-- Create `/app/admin/layout.tsx` that checks Supabase session, redirects to `/admin/login` if not authenticated
-- Create `/app/admin/login/page.tsx` with magic link login
-- Create `/app/admin/page.tsx` as the admin dashboard: list of tables with row counts and links to each management view
-- Create generic CRUD views for `companies`, `cities`, `milestones`, `sources`, `fleet_snapshots`, `ride_estimates`, `financial_periods`. They can be functional and plain (no need for visual polish); they need table views, create forms, edit forms, and delete confirmation
-- Every mutation writes to `audit_log` via the database trigger set up in 0.2
-- Add an `is_published` toggle on `milestones` (draft vs. published)
-
-**Acceptance**: admin user can log in, view every table, create and edit rows, and see audit log entries reflecting their actions. Unauthenticated visitors to `/admin/*` are redirected to login.
-
-### 0.7 Error monitoring
-
-**Do**:
-- Create `lib/notify.ts` with a single function `notifySlack(message: string, level: 'info' | 'warn' | 'error')` that POSTs to the Slack webhook
-- Wrap scraper entry points (to be added in later phases) with try/catch that calls `notifySlack` on errors
-- Add a daily digest cron (Vercel Cron) that reports scraper health (last successful run per source); placeholder for now, activated when scrapers exist
-
-**Acceptance**: calling `notifySlack('test', 'info')` from a development environment posts to the configured Slack channel.
+- Q1 2026 (reported 2026-04-29): Other Bets revenue $411M (down YoY from $450M), operating loss $2.1B (widened from $1.22B). Pichai confirmed 500K+ weekly Waymo rides on the call.
+- Q2 2026 (reported 2026-07-22): Other Bets revenue $382M (vs $373M), operating loss $1.8B (vs $1.24B). Waymo commentary on the Q2 call UNVERIFIED (transcript not yet reviewed; do so in Phase 4.7 backfill).
 
 ---
 
-## Phase 1: Thesis and Operations
+## Phase 2: Re-entry and freshness
 
-**Ships publicly**: yes. First public launch.
+**Ships publicly**: yes (deploys to the live but unannounced site).
 
-**Goal**: replace the placeholder landing with a proper opening narrative plus live operations data.
+**Goal**: nothing on the site is stale or broken. The scraper pipeline is verified healthy. The database reflects August 2026 reality. This phase is deliberately unglamorous; it is the precondition for everything else.
 
-### 1.1 Thesis section
+### 2.1 Repo, pipeline, and database audit
 
-**Do**:
-- Build `components/sections/ThesisHero.tsx`: full-viewport hero with the site name, a short tagline, and a large animated counter showing Waymo's weekly ride count. The counter pulls from the most recent `ride_estimates` row for Waymo where `city_id IS NULL` (company-wide estimate). Animation: count up from 0 to current value on first scroll into view (use Framer Motion's `useInView` and a tween).
-- Below the hero: a 3-paragraph thesis written in editorial voice explaining (a) what Waymo is and how it makes money, (b) why it matters now (commercial inflection, scaling cities, unit economics question), (c) what this site does: systematic tracking of the operational and financial picture. The user will provide final copy through the admin UI; for now, render from a `thesis_copy` row in a new simple `site_content` table (key/value: `key text unique`, `markdown_body text`, `updated_at`). Placeholder copy can be drafted by Claude Code with a comment noting it is placeholder.
-- Below the thesis: a key-stats band with four `<Metric>` components, all pulling from CPUC quarterly disclosures (California operations only) except where noted:
-  1. Weekly rides (CA): weekly average over the most recent quarter, derived as `total_trips / weeks_in_quarter` from the latest CPUC filing.
-  2. Cities served: count of Waymo cities with status 'public' or 'waitlist', from the `cities` table (not CA-specific).
-  3. Cumulative trips (latest full year, CA): sum of all four quarterly `total_trips` for the most recent complete calendar year.
-  4. Vehicle miles (latest full year, CA): sum of all four quarterly `total_vmt_zev` for the most recent complete calendar year.
-  
-  Each tile's tooltip explains the derivation, cites CPUC as the source, and surfaces the CA-only scope where applicable. The "as of" date for tiles 1, 3, and 4 is the period_end of the latest CPUC quarter.
-
-**Acceptance**: landing page renders the hero, thesis, and stats band. Counter animates correctly. Tooltips work on all metrics. Swapping the thesis copy through admin updates the page on next revalidation.
-
-### 1.2 Operations section
+**Background**: the August 2026 planning session could not reach the Supabase project or GitHub Actions history from its sandbox, so the actual state of the data pipeline is unknown. The scraper has theoretically been running weekly since May.
 
 **Do**:
-- Build three sub-sections on the landing page below the thesis. Per-city ride volumes and per-city fleet counts are not disclosed by Waymo or any state regulator we have access to; the original cohort ramp and rides-per-vehicle visuals (which depended on this data) have been replaced with a CA-quarterly trips chart driven by CPUC disclosures.
+- Run the repo locally: `npm install`, `npm run build`, `npm run lint`. Note any dependency warnings; do not upgrade majors without surfacing.
+- Check GitHub Actions history for `scrape-cpuc.yml`: has it run weekly since May? Any failures? Did failures reach Slack?
+- Query the database and record: which CPUC quarters exist in `ride_estimates` (specifically, did Q1 2026 land after its ~May publication?), latest `milestones` entry, current `cities` rows and statuses, content of `latest_weekly_rides_disclosed`, row counts per table.
+- Verify the Robotaxi Tracker JSON mirror (`/data/cpuc-waymo-deployment-YYYY.json`) still exists and serves 2026 data; the CPUC scraper depends on it. If the mirror is gone or stale, this becomes the first surfaced decision of the resumption (fallback: scrape CPUC's published spreadsheets directly; that is a bigger lift and needs its own module).
+- Verify Supabase project health (not paused; magic link login still works locally), Slack webhook fires, Vercel deployment still builds from main.
+- Write findings into a short dated section in `architecture.md` under Known gaps and debt, then propose the fix list for the rest of Phase 2 based on what is actually broken vs. the assumptions in this plan.
 
-**1.2.a City launch timeline**. Vertical accordion showing every Waymo city sorted by `launch_date`. Clicking a city expands a panel showing: city name, launch date, service area in sq mi, status. Per-city fleet and ride volumes are not shown because they are not disclosed. Data source: `cities` table.
+**Acceptance**: a written audit summary exists; the user has approved the adjusted Phase 2 scope. (Completed 2026-08-15; findings recorded in architecture.md. Modules 2.2, 2.3, and 2.6 reflect the audit results.)
 
-**1.2.b Coverage map**. Mapbox GL JS map centered on the US, zoomable. Each city's service area shown as a polygon (or a circle of equivalent area, derived from `service_area_sq_mi` and `latitude, longitude`, until polygon geometry is added in a future migration). Polygons color-coded by launch cohort (`getCohortBucket` from `lib/cohorts.ts`). Hovering a polygon shows the city name and key stats. Waitlist cities styled with dashed outline and reduced fill opacity. A `service_area_geojson` column on `cities` is reserved for future polygon support.
+### 2.2 CPUC scraper rebuild (direct) and catch-up
 
-**1.2.c Quarterly trips chart**. Time-series line chart driven by CPUC quarterly disclosures, populated by the scraper built in 1.3. X-axis is calendar quarters, Y-axis is fulfilled trips per quarter (California only). Annotation of QoQ growth rate at each point. As-of footnote below the chart noting the latest available quarter and expected timing of the next disclosure. Editorial framing in a single paragraph above the chart explaining that California is Waymo's largest market and a useful proxy for company trajectory; for live cross-state granularity, link out to Robotaxi Tracker.
-
-A methodology footnote at the bottom of the Operations section attributes CPUC as the primary source and points readers to Robotaxi Tracker for live community-tracked granularity.
-
-**Acceptance**: all three sub-sections render with seeded and CPUC-sourced data; when the user adds a new city via admin or new CPUC data lands via the scraper, charts update on next revalidation; mobile responsive.
-
-### 1.3 CPUC quarterly ingestion
-
-**Background**: Discovery during planning revealed that Robotaxi Tracker's public data is community-spotted vehicle sightings and cumulative trip totals, not official fleet counts or weekly ride volumes; their `/api/*` endpoints are blocked by `robots.txt`. The right primary source for a finance-oriented site is the California Public Utilities Commission's quarterly Waymo deployment filings, which Robotaxi Tracker mirrors as a structured JSON file at `/data/cpuc-waymo-deployment-YYYY.json`. Robotaxi Tracker becomes an outbound methodology link, not a backend dependency.
+**Background, from the 2026-08-15 audit**: Robotaxi Tracker's JSON mirror is gone; its `/data/*.json` paths now serve the site homepage. The scraper treated the resulting 404s as routine skips, so all 16 GitHub Actions runs since May reported success while ingesting nothing. The database holds Q1-Q4 2025 only; Q1 2026 (published by CPUC in May) never landed. Decision made 2026-08-15: keep the CPUC series and rebuild the scraper against CPUC's own published files.
 
 **Do**:
-- Add migration `0006_cities_external_keys.sql`: `ALTER TABLE cities ADD COLUMN external_keys jsonb NOT NULL DEFAULT '{}'::jsonb`, plus a GIN index. No data updates; subsequent scrapers populate per source. This is the standard pattern for cross-source city mapping (CPUC, NHTSA, Waymo blog all map cities differently).
-- Add migration `0007_ride_estimates_vehicle_miles.sql`: `ALTER TABLE ride_estimates ADD COLUMN vehicle_miles_traveled numeric` (nullable). CPUC reports vehicle-miles-traveled per quarter and the data warrants a first-class column.
-- Insert a sources row for CPUC: `url` pointing to `https://www.cpuc.ca.gov/regulatory-services/licensing/transportation-licensing-and-analysis-branch/autonomous-vehicle-programs/quarterly-reporting`, `publisher` 'California Public Utilities Commission', `title` 'Waymo Quarterly AV Deployment Data'.
-- Create `lib/scrapers/cpuc.ts`. Fetches the JSON file from `https://robotaxitracker.com/data/cpuc-waymo-deployment-YYYY.json` (current year) and parses `quarter_summaries`. For each quarter, looks up an existing `ride_estimates` row by `(company_id, period_start, period_end)`. Computes content hash over `(period_start, period_end, total_trips, total_vmt_zev)`. Inserts new rows or updates existing rows on hash mismatch (CPUC sometimes restates quarters). Fields: `city_id = NULL` (CA company-wide), `rides_per_week = total_trips / 13`, `vehicle_miles_traveled = total_vmt_zev`, `confidence = 'high'`, methodology note explaining CPUC sourcing and the Robotaxi Tracker mirror.
-- The CPUC source file also contains `incident_metrics` (collisions, complaints, injuries per 100K trips) and `monthly_trends`. The 1.3 scraper does not consume these. Phase 6 (Safety Dashboard) extends the parser to consume `incident_metrics`. `monthly_trends` is deferred until a chart needs that resolution.
-- Scraper runs weekly via GitHub Action (`.github/workflows/scrape-cpuc.yml`), Monday 13:17 UTC. CPUC publishes quarterly with a roughly 6-week lag; weekly polling is sufficient.
-- On scraper failure, call `notifySlack` at error level. On success, post info-level summary with insert/update counts.
-- Use `SCRAPER_USER_AGENT` env var. 2-second delay between any multi-file fetches.
-- Add a methodology footnote at the bottom of the Operations section attributing CPUC and pointing readers to Robotaxi Tracker for live granularity.
+- Investigate what CPUC actually publishes (file format, URL stability, per-quarter vs cumulative structure) and propose the parsing approach before writing code.
+- Rewrite `lib/scrapers/cpuc.ts` to fetch from cpuc.ca.gov directly. Keep the existing upsert/restatement logic, source rows, and etiquette (robots.txt, `SCRAPER_USER_AGENT`, 2s delays). Store raw fetched files in Supabase Storage per the scraper rules.
+- Fix the failure semantics that made the outage silent: once a quarter is more than ~6 weeks overdue relative to CPUC's publication calendar (May 1 / Aug 1 / Nov 1 / Feb 1 deadlines), a run that finds nothing new posts a Slack WARN, not a quiet success. Success messages include which quarters exist in the database.
+- Wire `/api/cron/scraper-health` to do its actual job: it still says "no scrapers configured yet". It should report the age of the latest CPUC quarter and the last successful scrape run.
+- Delete the stray `ride_estimates` row (period 2026-03-21 to 2026-03-27, rides_per_week 500000): it is a disclosed-metrics value mis-entered as a CPUC-style row, and it corrupts the quarterly chart (bogus 6.5M "Q1 2026" point) and the KeyStats cumulative tiles.
+- Backfill Q1 2026 and, once published, Q2 2026 (due 2026-08-01, expected imminently).
+- `QuarterlyTripsChart` renders multi-year data correctly (X-axis labels, QoQ across the year boundary) and its as-of footnote derives from data rather than hardcoded copy.
 
-**Acceptance**: scraper runs successfully in GitHub Actions, populates `ride_estimates` with quarterly CPUC rows, updates rows on restated quarters without duplicating, failures surface in Slack, KeyStats and QuarterlyTripsChart reflect CPUC data on next revalidation, methodology footnote renders.
+**Acceptance**: scraper runs green in GitHub Actions against the real CPUC source; Q1 2026 (and Q2 if available) in the database and on the chart; the stray row is gone; a simulated missing-quarter scenario produces a Slack WARN; health cron reports real scraper state.
 
-### 1.4 Milestones feed
+### 2.3 National disclosed-metrics series
 
-**Do**:
-- Build `/app/(public)/milestones/page.tsx` as a dedicated milestones page, accessible from global nav
-- Also build a compact "Recent milestones" module on the landing page (below Operations) showing the 5 most recent published milestones
-- Each milestone card: date, headline, tags, 1-sentence annotation (if present), "Read source" link
-- Tag-based filter chips at the top of the full milestones page ('New City', 'Technology', 'Operations', 'Partnership', 'International', 'Safety', 'Financial')
-- Admin view already exists from 0.6; ensure `is_published` toggle is prominent and `kyle_annotation` field is labeled clearly
-
-**Acceptance**: published milestones appear on the site, drafts do not, tag filters work, admin can toggle published state.
-
-### 1.5 Global last-updated and sources page
+**Background**: decision made 2026-08-15. The site's headline quantitative story should be national/global, not CA-only. Waymo's disclosed worldwide weekly-rides arc (100K -> 250K -> 500K -> the stated 1M end-2026 target) becomes a first-class time series now, rather than waiting for the Phase 4 extraction pipeline. Phase 4 later feeds this table automatically; Waymo's own blog/newsroom is where most disclosures actually break, so a lightweight monitor for it is part of Phase 4's scope.
 
 **Do**:
-- Footer displays "Last updated: [date of most recent row across all data tables]"
-- Build `/app/(public)/methodology/page.tsx`: plain editorial page explaining data sources, update frequency, estimation methodology, a changelog of methodology updates, and a contact email for corrections
-- Build `/app/(public)/methodology/sources/page.tsx`: auto-generated list of every unique source in the `sources` table, grouped by publisher
+- New migration (show SQL before applying): `disclosed_metrics` table. Proposed shape: `id` uuid pk, `company_id` fk, `metric` text (e.g. 'weekly_rides', 'cumulative_trips', 'fleet_size', 'cities_count'), `value` numeric, `as_of` date, `scope` text default 'worldwide', `source_id` fk (required in practice), `stated_by` text nullable (e.g. 'Waymo blog', 'Alphabet Q1 2026 call'), `notes` text, `created_at`. UUID pk keeps the audit trigger compatible.
+- Migrate the `latest_weekly_rides_disclosed` site_content row into the table; rewrite `lib/disclosed-metrics.ts` to query the table (latest row per metric) instead of parsing YAML-ish site_content text; retire the fragile text format and its fix-up scripts. ThesisHero and KeyStats keep their current prefer-disclosed behavior unchanged.
+- Seed the weekly-rides disclosure arc by hand with source rows (the ~100K, 250K, 500K disclosures and dates; re-verify each against its primary source at entry).
+- Build the headline national chart on the landing page: disclosed weekly rides over time (stepped line or dot-per-disclosure; disclosures are episodic, and the chart should be honest about that), with the 1M end-2026 target rendered as an annotation, not a data point. Editorial framing paragraph; the flat-500K observation belongs here if the user approves that copy.
+- Admin CRUD for `disclosed_metrics` following the existing pattern.
 
-**Acceptance**: methodology page renders, sources list reflects database contents, last-updated timestamp reflects most recent mutation.
+**Acceptance**: migration reviewed and applied; table seeded with sourced arc; national chart renders on the landing page above the CA section; hero and KeyStats read from the new table; admin can add a future disclosure end to end.
 
-### 1.6 Ship
+### 2.4 Waymo city roster and status refresh
+
+**Background**: the `cities` table has 11 rows with statuses as of ~April 2026. Reality as of August: see the briefing above. New cities exist in every status, and the current status enum ('announced' | 'waitlist' | 'public' | 'paused') has no value for "driverless operations, employee-only, public soon" (Las Vegas, Denver, San Diego, Tampa).
 
 **Do**:
-- Deploy to Vercel production
-- Configure custom domain (user will provide; ask if not set)
-- Verify all env vars configured in Vercel production
-- Run a final review pass against acceptance criteria in 1.1 through 1.5
-- Notify user that Phase 1 is ready for review before announcing
+- Surface the status-modeling decision before any migration: either (a) add an 'employee' status value via migration, or (b) map employee-only cities to 'announced' with a note. Recommendation: (a); the distinction is analytically meaningful (driverless ops running vs. paper announcement) and the timeline UI can style it. User decides.
+- Update all existing city rows to August 2026 statuses (Dallas open, Miami/Orlando open, Nashville public, Houston/San Antonio waitlist, etc.) with source rows for each change.
+- Add new rows: the four employee-only cities, Sacramento, Detroit, Washington DC, and (decision to surface) whether to include the full announced list and international testing cities (Tokyo, London) or hold those for a milestone-only treatment. Recommendation: include announced cities sparingly (only where Waymo has named a timeframe or begun operations) so the map and timeline stay signal-dense.
+- Update `service_area_sq_mi` where new figures are disclosed (CPUC's 2026-08-14 territory expansion is a source for CA).
+- Verify the coverage map and city timeline render the updated roster well at the new city count (~15-18 rows; the accordion and map were designed at 11).
+
+**Acceptance**: cities table matches verified August 2026 reality with sources; timeline and map render cleanly; status decision documented in `architecture.md`.
+
+### 2.5 Milestones backfill
+
+**Do**:
+- Backfill milestones for May through August 2026, each with a source row and (optionally) a `kyle_annotation`. Candidates from the briefing: freeway suspension (May) and resumption (2026-07-29); sixth recall (June); Uber-Waymo Phoenix pilot ending (May/June); Austin/Atlanta exclusivity unwind announcement (2026-07-24); Dallas open access (2026-08-04); CPUC Sacramento/San Diego approval (2026-08-14); Las Vegas Raiders partnership (2026-08-13); the four-city employee-driverless announcement (2026-07-08). The $16B raise (2026-02-02) and the 500K milestone are already present from the earlier seed (verified in the 2026-08-15 audit).
+- Editorial note for the thesis/hero copy: the flat-500K-across-disclosures observation (rides held steady while cities grew from 10 to 15) is exactly the kind of insight this site exists to surface. Draft a short thesis-section update for user review; do not publish without approval since it is an analytical claim.
+- Add a `fleet_snapshots` row for the ~3,500-4,000 figure only if a citable primary source is found; the current sources conflict.
+
+**Acceptance**: milestones feed reads as current through August 2026; no UNVERIFIED briefing item entered the database.
+
+### 2.6 Debt paydown (announce-visible only)
+
+**Do**, from the `architecture.md` debt list plus the 2026-08-15 audit findings, only the items a visitor or admin would hit:
+- Fix the KeyStats year-scoping bug: the "Trips in 2025 (CA)" and "Miles driven 2025 (CA)" tiles sum every quarter in the table regardless of year. Scope the sums to the most recent complete calendar year and derive the label from data. Same fix for the QuarterlyTripsChart framing sentence ("completed X trips in California in 2025" currently sums all points).
+- Remove hardcoded staleness-prone copy: "filed February 2026" (KeyStats tooltip and chart footnote), "2026 figures expected May 2026 onward". Derive from data or drop.
+- Fix status badges: `CityLaunchTimeline` and the CoverageMap popup collapse 'waitlist' into "Announced". Render all statuses distinctly (matters more once the status model expands in 2.4).
+- Fix the broken delete confirmation on `companies/[id]` (server-form `confirm()` bug); apply the same pattern check to all other delete forms.
+- Add missing `revalidatePath` calls to fleet-snapshots, ride-estimates, and financial-periods mutations (they will matter once landscape and financials pages read those tables).
+- Regenerate `lib/supabase/types.ts` properly for the migrations landed in 2.3/2.4 (and retire the manual patches).
+- Magic-link login click-through retest against prod (deferred from 1.6).
+- Explicitly deferred: `site_content` YAML textarea hardening, audit trigger generalization, city detail pages, `service_area_geojson` polygons.
+
+**Acceptance**: listed fixes verified (delete confirm in a real browser per the working agreement); deferred list re-recorded in `architecture.md`.
+
+### 2.7 CLAUDE.md and architecture.md revision
+
+**Do**:
+- Propose a `CLAUDE.md` edit set for user approval: amend the "multi-company data, Waymo-only frontend" architecture principle to the v2 principle 7 wording; add a "Phase 2 status" section on completion; note the extraction-model decision as pending Phase 4; update the First session section to point at this plan.
+- Update `architecture.md` per the standard maintenance block (this phase touched schema, data, and components).
+
+**Acceptance**: user approved the CLAUDE.md diff; both files committed with the module work.
 
 ---
 
-## Phase 2: Unit Economics
+## Phase 3: Competitive landscape
 
-**Ships publicly**: yes.
+**Ships publicly**: yes (deployed; announcement still held for Phase 5).
 
-**Goal**: the interactive unit economics model. The feature most likely to get shared by growth investors.
+**Goal**: `/landscape` becomes the best sourced, most honest single page on the internet about who is actually operating robotaxis, at what scale, with what disclosure quality. This is the phase that makes the site match its "AV deployment tracking" ambition.
 
-### 2.1 Data model
-
-**Do**:
-- New migration adding:
-
-```
-unit_economics_assumptions
-  id uuid pk
-  company_id uuid fk
-  as_of_date date
-  vehicle_cost_usd numeric
-  vehicle_useful_life_years numeric
-  sensor_suite_cost_usd numeric
-  sensor_refresh_cycle_years numeric
-  compute_cost_usd numeric
-  remote_assist_ratio numeric                workers per 100 vehicles
-  remote_assist_loaded_cost_per_hour numeric
-  insurance_per_vehicle_per_year_usd numeric
-  cleaning_and_depot_per_vehicle_per_day_usd numeric
-  energy_per_mile_usd numeric
-  mapping_overhead_per_vehicle_per_year_usd numeric
-  avg_miles_per_ride numeric
-  avg_fare_per_ride_usd numeric
-  rides_per_vehicle_per_day numeric
-  source_id uuid fk
-  methodology_note text                       required
-  is_active boolean                           only one active set per company at a time
-  created_at, updated_at
-```
-
-- Seed one baseline set of assumptions for Waymo with sourced estimates. Every value needs a citation note. Where no public source exists, mark as "Kyle estimate" explicitly.
-
-### 2.2 Cost-per-mile waterfall
+### 3.1 Operator data model
 
 **Do**:
-- Build `components/charts/CostWaterfall.tsx` using Recharts
-- Computes per-ride cost from the active `unit_economics_assumptions` row, decomposed into layers: vehicle amortization, sensor amortization, compute, remote assist, insurance, cleaning/depot, energy, mapping overhead
-- Waterfall chart visualizing each contribution, with total on the right
-- Each bar has a tooltip explaining the calculation and citing the source
-
-**Acceptance**: chart renders correctly, numbers tie to assumptions row, tooltips present on every bar.
-
-### 2.3 Revenue per ride build
-
-**Do**:
-- Build `components/sections/RevenuePerRide.tsx`
-- Shows avg fare (from assumptions or per-city ride_estimates), take rate vs. driver payout comparison to human ride-share (illustrative only), and revenue per vehicle per day derived from rides_per_vehicle_per_day × avg_fare
-- Editorial narrative framing each number
-
-**Acceptance**: renders correctly, ties to assumptions.
-
-### 2.4 Interactive calculator
-
-**Do**:
-- Build `/app/(public)/unit-economics/page.tsx` hosting the unit economics section
-- Component `components/sections/UnitEconomicsCalculator.tsx`:
-  - Sliders for: rides per vehicle per day, avg fare, vehicle cost, remote assist ratio, insurance
-  - Live contribution margin output (revenue per ride minus variable costs per ride)
-  - Live payback period on vehicle
-  - Live contribution margin per vehicle per year
-  - "What has to be true" inverse solver: user enters target contribution margin per vehicle, component back-solves the required rides/day at current fare, or required fare at current utilization
-  - URL state encoding: slider values are encoded into query params so a user can share a specific scenario by copying the URL
-  - Small "Reset to baseline" button that restores assumptions to the active row
-- Editorial narrative frames the calculator: "The baseline below is our current best estimate of Waymo's per-vehicle economics. Move the sliders to stress-test the model."
-
-**Acceptance**: sliders update output in real time, URL state round-trips correctly (reload the URL and sliders show the saved state), calculations are correct and match a hand check.
-
-### 2.5 Breakeven analysis
-
-**Do**:
-- Build `components/sections/CityBreakeven.tsx`
-- For each active city, model cumulative cash flow over months-since-launch:
-  - Launch costs: fixed (depot buildout, mapping, regulatory), stored in `cities.launch_costs_usd` (add column via migration)
-  - Monthly contribution: rides_per_week × 4.33 × contribution_margin_per_ride
-  - Ramp curve: the ride count ramps based on historical `ride_estimates` for that city (actuals), projected forward using a simple logistic fit
-- Chart: cumulative cash flow line per city, crossing zero is breakeven
-- Table below: "Months to city-level cash breakeven" per city (nullable where projection doesn't cross zero)
-
-**Acceptance**: chart renders, breakeven computations visible, methodology tooltip explains assumptions and limitations.
-
-### 2.6 Ship
-
-**Do**:
-- Deploy, verify, notify user before announcement
-
----
-
-## Phase 3: Implied P&L and Financials
-
-**Ships publicly**: yes.
-
-**Goal**: replace the thin financials table with a proper implied P&L. The section a growth investor would screenshot for an IC memo.
-
-### 3.1 Other Bets walk
-
-**Do**:
-- Add data entry support in admin for `financial_periods` specifically covering Alphabet Other Bets segment
-- Build `components/charts/OtherBetsWalk.tsx`: stacked bar chart showing Other Bets revenue and operating loss by quarter, with the user-estimated Waymo share separated out from the rest (Verily, Wing, GFiber, X residual)
-- Methodology tooltip on the Waymo share bar explicitly noting this is an estimate
-
-### 3.2 Implied Waymo standalone P&L
-
-**Do**:
-- New migration adding `implied_pnl_periods` table:
-
-```
-implied_pnl_periods
-  id uuid pk
-  company_id uuid fk
-  fiscal_period text
-  period_start, period_end date
-  revenue_usd numeric                    derived from ride_estimates × avg_fare, stored for transparency
-  revenue_methodology text
-  cogs_usd numeric                       derived from unit economics × rides
-  cogs_methodology text
-  gross_profit_usd numeric
-  opex_usd numeric                       allocated from Other Bets
-  opex_methodology text
-  operating_income_usd numeric
-  capex_usd numeric
-  capex_methodology text
-  free_cash_flow_usd numeric
-  is_locked boolean                       true when user has reviewed and approved
-  created_at, updated_at
-```
-
-- Build a recompute job (cron, weekly) that regenerates unlocked periods based on current ride_estimates and unit_economics_assumptions
-- Build `components/sections/ImpliedPnL.tsx`:
-  - Table view of quarters down the rows, line items across the columns (revenue, cogs, gross profit, gross margin %, opex, operating income, capex, FCF)
-  - Side-by-side "disclosed" (Other Bets segment revenue when Waymo is called out) vs. "modeled"
-  - Every number is a `<Metric>` with methodology tooltip
-  - Export as CSV button
-- Admin view to lock periods and override line items with notes
-
-**Acceptance**: P&L renders, numbers tie, CSV export matches on-screen values, tooltips on every cell, admin can lock and override.
-
-### 3.3 Capex intensity
-
-**Do**:
-- Build `components/charts/CapexIntensity.tsx`: chart showing capex per incremental weekly ride over time (capex / change in rides per week, rolling 4-quarter window)
-- Narrative framing: is Waymo getting more capital efficient as it scales?
-
-### 3.4 Valuation framework
-
-**Do**:
-- Build `/app/(public)/financials/valuation/page.tsx` (linked from main financials page)
-- Interactive "What has to be true" calculator:
-  - Inputs: target 2030 valuation, assumed exit revenue multiple, assumed 2030 operating margin
-  - Outputs: required 2030 revenue, implied 2030 rides per week, implied cities
-  - Shareable URL state
-- Comparable multiples table: ride-share comps (Uber, Lyft), tech-enabled services comps, selected transportation comps, each with a tooltip on why it was chosen as a reference
-
-**Acceptance**: calculator works, comparable table renders, URL state round-trips.
-
-### 3.5 Financials landing page
-
-**Do**:
-- Build `/app/(public)/financials/page.tsx` as the container for 3.1 through 3.4
-- Editorial framing at the top: what this section does, methodology disclaimer
-- Sections stacked with scroll nav on the left (sticky on desktop)
-
-### 3.6 Ship
-
-**Do**:
-- Deploy, verify, notify user before announcement
-
----
-
-## Phase 4: Alphabet Earnings extraction pipeline
-
-**Ships publicly**: yes.
-
-**Goal**: automated extraction of Waymo mentions from Alphabet filings, transcripts, and presentations.
-
-### 4.1 Data model
-
-**Do**:
-- Migration adding:
-
-```
-earnings_events
-  id uuid pk
-  company_id uuid fk                     parent company (Alphabet for Waymo mentions)
-  subject_company_id uuid fk             the company the mentions are about (Waymo)
-  fiscal_period text                     'Q1 2026'
-  event_type text                        '10-K' | '10-Q' | '8-K' | 'earnings_call' | 'investor_day' | 'press_release'
-  event_date date
-  source_id uuid fk
-  storage_key text                       raw document in Supabase Storage
-  processing_status text                 'pending' | 'extracted' | 'reviewed' | 'failed'
-  extraction_version int                 for re-processing
-  processed_at timestamp
-  created_at, updated_at
-
-waymo_mentions
-  id uuid pk
-  earnings_event_id uuid fk
-  mention_type text                      'revenue_reference' | 'city_count' | 'ride_count' | 'capex' | 'operating_loss' | 'strategic_commentary' | 'forward_guidance' | 'competitive_reference' | 'safety_reference'
-  quote_text text                        the actual sentence or paragraph
-  speaker text                           'Sundar Pichai' | 'Ruth Porat' | 'Anat Ashkenazi' | 'Analyst: [name]' | null for filings
-  extracted_metric jsonb                 { metric, value, unit, period } or null
-  confidence text                        'high' | 'medium' | 'low'
-  kyle_annotation text
-  review_status text                     'pending' | 'approved' | 'rejected'
-  page_or_timestamp text
-  created_at, updated_at
-
-extracted_metrics
-  id uuid pk
-  mention_id uuid fk -> waymo_mentions
-  metric_name text                       'weekly_rides' | 'cities_served' | 'autonomous_miles' etc.
-  metric_value numeric
-  unit text
-  as_of_period text                      the period the metric describes
-  stated_at_event_id uuid fk             the event where it was stated
-  created_at
-```
-
-### 4.2 SEC EDGAR scraper
-
-**Do**:
-- Create `lib/scrapers/sec_edgar.ts`
-- Daily GitHub Action hits `data.sec.gov` (JSON API, not HTML UI) for Alphabet CIK 0001652044 (10-K, 10-Q, 8-K filings)
-- Detects new filings since last run (compare accession numbers to existing `sources` table entries)
-- Downloads filing HTML, stores raw in Supabase Storage, creates `sources` + `earnings_events` rows with `processing_status = 'pending'`
-- Fires extraction pipeline (see 4.4)
-- Respects SEC fair use: reasonable rate, user agent with contact email
-
-### 4.3 Earnings call transcript scraper
-
-**Do**:
-- Create `lib/scrapers/motley_fool_transcripts.ts`
-- Quarterly GitHub Action checks for new Alphabet earnings call transcripts
-- Parses HTML into structured transcript (speaker, turn, text)
-- Stores raw HTML and parsed JSON in Supabase Storage, creates `sources` + `earnings_events` rows
-- Respect rate limits, user agent, robots.txt
-
-### 4.4 Extraction pipeline
-
-**Do**:
-- Create `lib/extraction/extract_waymo_mentions.ts`
-- Input: an `earnings_events` row in `pending` status
-- Algorithm:
-  1. Load raw document from Supabase Storage
-  2. Chunk it: filings by section heading, transcripts by speaker turn (combined into ~2000 token windows)
-  3. For each chunk, call Anthropic API with Claude Sonnet 4, using a structured extraction prompt that returns JSON matching the `waymo_mentions` schema
-  4. Prompt must include the mention_type enum and request citations (exact quote, speaker, page or timestamp)
-  5. Prompt instruction: "Only extract references to Waymo specifically. Ignore references to 'self-driving' or 'autonomous vehicles' in general unless Waymo is named or directly implied."
-  6. Validate returned JSON with Zod schema; reject malformed responses and log
-  7. Insert mentions with `review_status = 'pending'`
-  8. Update `earnings_events.processing_status = 'extracted'`, record `extraction_version`
-- Runs on cron hourly; picks up any `pending` events
-- Stores extraction version so prompts can be improved and re-run
-
-### 4.5 Admin review queue
-
-**Do**:
-- Build `/app/admin/earnings/page.tsx` showing pending mentions grouped by earnings event
-- Each mention row: quote, extracted type, speaker, extracted metric, confidence
-- Actions: approve, reject, edit type/metric, add `kyle_annotation`
-- Bulk approve within an event
-- Approving sets `review_status = 'approved'`; the mention becomes publicly visible
-
-### 4.6 Public earnings section
-
-**Do**:
-- Build `/app/(public)/earnings/page.tsx`
-- Timeline view: reverse-chron cards per `earnings_event`, each expandable to show approved mentions grouped by type. Each mention displays the quote, speaker, and `kyle_annotation` as a pull-out
-- Metrics evolution view: tab that plots every numeric mention over time (weekly_rides mentioned on Q4 '24 call, Q1 '25 call, etc.)
-- Verbatim search: full-text search across approved mentions using Postgres `tsvector`
-- Each event gets a permalink (`/earnings/[event-slug]`) with OG image generation via Vercel OG
-- Methodology link explaining the extraction process and its limitations
-
-### 4.7 Backfill
-
-**Do**:
-- Script `scripts/backfill_earnings.ts` that, given a date range, ingests all Alphabet filings and transcripts in that range
-- Run for the last 8 quarters as initial corpus
-
-### 4.8 Ship
-
-**Do**:
-- Deploy, run backfill, review all extractions before announcing
-- Notify user before public announcement
-
----
-
-## Phase 5: Competitive Landscape
-
-**Ships publicly**: yes.
-
-**Goal**: Waymo vs. the field. Positions Waymo's lead as a tangible, updating number.
-
-### 5.1 Competitor data model
-
-**Do**:
-- Add to existing `companies` table: rows for Tesla Robotaxi, Zoox, Pony AI, WeRide, Baidu Apollo (already seeded in 0.2)
-- New migration adding `competitor_snapshots`:
+- Show migration SQL before applying (working agreement). Proposed additions:
 
 ```
 competitor_snapshots
   id uuid pk
-  company_id uuid fk
+  company_id uuid fk -> companies
   snapshot_date date
-  cities_served int
-  vehicle_count int
-  weekly_rides int
-  autonomous_miles_cumulative numeric
-  funding_total_usd numeric
-  implied_valuation_usd numeric
-  disclosure_source_id uuid fk
+  cities_served int                    nullable
+  vehicle_count int                    nullable
+  weekly_rides int                     nullable
+  cumulative_rides numeric             nullable
+  autonomous_miles_cumulative numeric  nullable
+  funding_total_usd numeric            nullable
+  implied_valuation_usd numeric        nullable
+  supervision text                     'driverless' | 'safety_operator' | 'mixed' | 'safety_driver_legal_driver'
+  disclosure_quality text              'regulatory' | 'company_disclosed' | 'earnings_disclosed' | 'press_reported' | 'estimated'
+  source_id uuid fk -> sources         required in practice; enforce in admin UI
   notes text
   created_at
 ```
 
-- Admin entry forms for competitor data
+- Every column nullable by design (principle 7: sparse data is normal). `disclosure_quality` implements principle 9 at the schema level.
+- Extend `companies` with `hq_country text`, `ownership text` (e.g., 'Amazon subsidiary', 'Nasdaq: PONY'), `status_summary text` (one editorial sentence, admin-maintained). Companies table currently has 6 rows; add rows for operators now relevant: Avride, May Mobility, Motional, Nuro, Didi (surface the final roster for approval).
+- The `cities` table already supports non-Waymo rows via `company_id`. Enter competitor cities (Zoox Las Vegas/SF/Austin, Tesla's seven metros, Apollo Go Dubai, WeRide Abu Dhabi/Dubai, Pony Zagreb, etc.) with correct statuses; the Waymo-only queries on existing pages already filter by company and are unaffected (verify).
+- Admin CRUD for `competitor_snapshots` following the existing admin page pattern.
 
-### 5.2 Side-by-side comparison
+**Acceptance**: migration reviewed and applied; admin can enter a full competitor snapshot with source; existing Waymo pages unaffected (verified in browser).
 
-**Do**:
-- Build `components/sections/CompetitorTable.tsx`
-- Columns: Waymo, Tesla, Zoox, Pony, WeRide, Baidu
-- Rows: cities served, vehicles deployed, weekly rides, autonomous miles, funding total, most recent valuation
-- Each cell shows value + "as of" date (some competitors disclose less frequently)
-- Visual "lead multiple" indicator on Waymo row where applicable
-
-### 5.3 Waymo vs. Tesla disclosed-data comparison
+### 3.2 Sourced data entry
 
 **Do**:
-- Build a comparison view between Waymo (CPUC-disclosed quarterly trips, CA only, sourced via the Phase 1.3 scraper) and Tesla (whatever disclosed source exists at Phase 5 planning time). Tesla does not have a CA PUC equivalent because they were not yet running paid driverless service in California as of Phase 1; this should be re-investigated when Phase 5 begins. Possible sources: Tesla quarterly investor updates, NHTSA SGO incident-derived ride volume signal, state regulator filings if Texas or other Tesla operating states publish equivalent data.
-- If no disclosed Tesla source exists at Phase 5 planning time, surface and decide: ship the comparison with disclosed-Waymo and Robotaxi-Tracker-Tesla (clearly labeled with mixed-confidence methodology), or defer the comparison to a later phase.
-- Annotate key events on the chart (major city launches, announcements).
+- Enter initial snapshots for Waymo, Zoox, Tesla, Baidu Apollo Go, Pony.ai, WeRide (and the minor US operators if the roster decision includes them), using the State of the world briefing as the checklist but re-verifying each figure against its primary source at entry time. UNVERIFIED items stay out.
+- Timing note: Baidu and Pony.ai report Q2 2026 earnings on 2026-08-18. If this module runs after that date, use the fresh numbers.
+- Every snapshot row carries `disclosure_quality` honestly: Tesla's "7 metros" is company_disclosed; its ~21-car unsupervised fleet is press_reported (derived from Tesla's own chart by analysts); Waymo CPUC trips are regulatory.
 
-### 5.4 China context
+**Acceptance**: at least one complete, sourced snapshot per major operator; spot-check that every row's source URL resolves.
 
-**Do**:
-- Separate section on WeRide, Pony, Baidu Apollo
-- Editorial framing: regulatory and market structure differences, what China scale implies for US TAM
-- Static table of key metrics
-
-### 5.5 Ship
+### 3.3 Landscape page
 
 **Do**:
-- Deploy, verify, notify user before announcement
+- Build `/app/(public)/landscape/page.tsx` inside the existing `(public)` layout pattern. Structure, top to bottom:
+  1. **Editorial opening** (site_content key `landscape_intro`, admin-editable): the state of the race in three paragraphs. Draft placeholder copy marked `// TODO: user to replace with final copy`.
+  2. **The comparison table** (`components/sections/OperatorTable.tsx`): operators as rows (not columns; the operator count now exceeds the horizontal budget). Columns: operator, ownership, cities serving riders, supervision status, fleet, weekly or cumulative rides, latest disclosed valuation/funding, disclosure quality badge. Every cell an as-of date; empty cells render as "not disclosed" rather than blank (the emptiness is information).
+  3. **Supervision-status framing module**: a visual strip separating "driverless, paid, public" (Waymo, Zoox Vegas, Apollo Go, Pony, WeRide in specific cities) from "supervised or legally-a-driver" (Tesla Bay Area, Riyadh operators, etc.). This is the page's core editorial argument rendered as UI.
+  4. **US deployment map**: extend `CoverageMap` with a landscape variant showing multi-operator city markers (distinct marker style per operator, no service-area polygons for non-Waymo operators since areas are mostly undisclosed). Surface before building if this should instead be a separate lighter component; reuse is preferred but not at the cost of complicating the Waymo map.
+  5. **China and international section**: prose plus a compact static table (the v1 5.4 module, upgraded with the now-substantial international expansion: Dubai, Abu Dhabi, Zagreb, Switzerland). Editorial framing: what Apollo Go's 350K weekly rides at ~$28K vehicle cost implies for the US cost curve.
+  6. **Methodology footnote**: disclosure-quality taxonomy explained; links to CPUC, SEC, earnings sources; explicit statement of what the site refuses to guess.
+- Add Landscape to the global nav (it exists in the v1 nav spec but verify it is present and points here).
+- Tooltips and `<Term>` usage throughout; add glossary entries as needed (candidate terms: supervision levels, TCP permit, NHTSA exemption, Standing General Order).
+
+**Acceptance**: page renders with real entered data; sparse cells degrade gracefully; mobile responsive; nav link live; browser-verified.
+
+### 3.4 Disclosed-data comparison: Waymo vs. Zoox (CPUC)
+
+**Background**: v1 planned a Waymo vs. Tesla disclosed-data comparison and told us to re-investigate at planning time. Investigated: Tesla still files no California AV data (TCP permit, not an AV deployment permit), so no honest disclosed-data comparison with Tesla exists. Zoox, however, files in the CPUC Pilot Program: same regulator, same cadence as the site's primary Waymo source.
+
+**Do**:
+- Extend `lib/scrapers/cpuc.ts` (or a sibling) to ingest Zoox Pilot Program quarterly data if the mirror or CPUC publishes it in parseable form; otherwise manual quarterly entry with source rows. Investigate actual data availability first and surface findings before building.
+- Build a modest comparison chart on the landscape page: Waymo deployment trips vs. Zoox pilot trips, CA only, log scale or dual annotation (the gap is orders of magnitude; the chart's honesty about that gap is the point).
+- Tesla gets a prose treatment instead: a short sourced sidebar on why Tesla does not appear in disclosed-data comparisons (no CPUC AV filings; the CPUC "is the driver" statement). This is more credible than a mixed-confidence chart, and more interesting.
+
+**Acceptance**: comparison renders from disclosed data only; Tesla sidebar sourced; methodology tooltip complete.
+
+### 3.5 Ship checkpoint
+
+**Do**: deploy, verify all Phase 3 acceptance criteria, update `architecture.md` and `pre-launch.md`, notify user for review. No announcement.
 
 ---
 
-## Phase 6: Safety Dashboard
+## Phase 4: Financials and the extraction engine
 
-**Ships publicly**: yes.
+**Ships publicly**: yes (deployed; announcement held for Phase 5).
 
-**Goal**: own the narrative on the data bears use to attack Waymo.
+**Goal**: the implied Waymo P&L (the artifact an investor screenshots for an IC memo) built on top of an automated earnings-extraction pipeline, so the financial picture refreshes itself each quarter instead of rotting between sessions. This merges v1 Phases 3 and 4 and reverses their order: pipeline first, P&L on top.
 
-### 6.1 Data ingestion
+**Sequencing note**: v1 derived implied-P&L COGS from the unit economics assumptions table, which now ships post-announce (Phase 6). The v2 implied P&L therefore ships as v1: revenue build from disclosed rides and modeled fare, opex allocated from Other Bets, capex modeled, with gross-margin decomposition explicitly marked "arrives with the unit economics module." When Phase 6 ships, the P&L upgrades in place. This dependency is deliberate and documented in the P&L's methodology tooltip from day one.
 
-**Do**:
-- CPUC `incident_metrics`: extend the existing `lib/scrapers/cpuc.ts` parser (built in Phase 1.3) to also consume `incident_metrics` and `coverage` fields from the CPUC JSON. Write to a new `safety_incidents` table or directly into a quarterly safety summary table. Decide schema based on what the dashboard needs at 6.2 design time. The CPUC file already covers California, which is Waymo's largest disclosed market; this gives a real disclosed safety baseline before NHTSA or DMV data lands.
-- NHTSA Standing General Order incident data: monthly scrape (`lib/scrapers/nhtsa_sgo.ts`). Filter for Waymo-involved incidents. National coverage.
-- CA DMV disengagement report: annual scrape (`lib/scrapers/ca_dmv_disengagement.ts`), published in February.
-- Waymo Safety Hub blog: RSS scrape, filed as `milestones` with `safety` tag.
+### 4.1 Data model
 
-### 6.2 Safety metrics dashboard
+As specified in v1 4.1 (`earnings_events`, `waymo_mentions`, `extracted_metrics` tables), with one addition: `earnings_events.event_type` gains 'shareholder_letter'. Show full migration SQL before applying.
 
-**Do**:
-- New migration: `safety_incidents` and `disengagement_reports` tables (schemas sized to scraper output)
-- Build `/app/(public)/safety/page.tsx`:
-  - Incidents per million miles, time-series
-  - Serious-injury comparison vs. human baseline (with methodology tooltip)
-  - Disengagement rate trend over years where reported
-  - Incident type breakdown (bar chart)
-- Editorial framing: this is the data bears use; we show it transparently
+### 4.2 SEC EDGAR scraper
 
-### 6.3 Transparency annotations
+As specified in v1 4.2 (`lib/scrapers/sec_edgar.ts`, daily GitHub Action, Alphabet CIK 0001652044, 10-K/10-Q/8-K detection by accession number, raw filings to Supabase Storage, `pending` status rows, SEC fair-use etiquette).
 
-**Do**:
-- Each incident row links to source filing
-- Methodology section acknowledges critiques (reporting lag, threshold differences)
+### 4.3 Earnings call transcript scraper
 
-### 6.4 Ship
+As specified in v1 4.3, with a pre-build check: verify Motley Fool transcripts remain accessible and robots.txt-permitted in August 2026; if not, surface alternatives (Seeking Alpha is generally paywalled; Alphabet's own IR site posts webcast transcripts/prepared remarks) before writing any scraper.
 
-**Do**:
-- Deploy, verify, notify user before announcement
+### 4.4 Extraction pipeline
 
----
+As specified in v1 4.4 (chunking, structured extraction to the `waymo_mentions` schema, Zod validation, `extraction_version`, hourly cron), with two updates:
+- Model: use the model chosen in the Phase 4 model decision (see Tech stack section above), not the hardcoded April 2026 string.
+- Add per-event cost logging (tokens in/out) to the Slack success notification, so pipeline economics are visible from the first run.
 
-## Phase 7: Bull and Bear cases
+### 4.5 Admin review queue
 
-**Ships publicly**: yes.
+As specified in v1 4.5. Nothing extracted is public until approved; this is the existing `pending_review` etiquette applied to LLM output.
 
-**Goal**: explicit scenario analysis. The closing argument.
+### 4.6 Public earnings section
 
-### 7.1 Structure
+As specified in v1 4.6 (`/earnings` timeline of events with approved mentions, metrics-evolution view, full-text search, per-event permalinks with OG images).
 
-**Do**:
-- Build `/app/(public)/outlook/page.tsx` with three sub-sections stacked:
-  1. Bull case narrative + numbers
-  2. Bear case narrative + numbers
-  3. Author's weighted view with explicit probability estimates and watch items
-- Each case cites modules from prior phases (operations, unit economics, financials) as evidence
+### 4.7 Backfill
 
-### 7.2 Scenario builder
+Run the backfill script for the last 8 quarters of Alphabet filings and calls (Q3 2024 through Q2 2026). This closes the UNVERIFIED item from the briefing (what was said about Waymo on the Q2 2026 call) and seeds the metrics-evolution view with the 100K -> 250K -> 500K weekly-rides disclosure arc.
 
-**Do**:
-- Reuse the valuation framework component from Phase 3.4
-- Pre-configure bull and bear scenarios as named presets
+### 4.8 Other Bets walk
 
-### 7.3 Ship
+As specified in v1 3.1: admin entry for Other Bets quarterly figures (the briefing has Q1/Q2 2026; backfill earlier quarters from filings ingested in 4.7), `OtherBetsWalk` chart separating the user-estimated Waymo share with explicit estimate labeling.
 
-**Do**:
-- Deploy, verify, notify user before announcement
+### 4.9 Implied Waymo standalone P&L
+
+As specified in v1 3.2 (`implied_pnl_periods` table, weekly recompute cron for unlocked periods, table view with disclosed-vs-modeled columns, CSV export, admin lock/override), minus the unit-economics COGS derivation per the sequencing note above. Methodology strings must state the v1 simplification plainly.
+
+### 4.10 Financials landing page and ship checkpoint
+
+Build `/financials` as the container (v1 3.5 layout: editorial opening, sticky scroll nav, sections stacked); capex intensity chart (v1 3.3) if data supports it, else defer to Phase 6; deploy; verify; update `architecture.md` and `pre-launch.md`; notify user. The valuation framework (v1 3.4) moves to Phase 8 with the outlook work, where its scenario presets belong.
 
 ---
 
-## Phase 8: Polish and distribution
+## Phase 5: Launch
 
-**Ships publicly**: ongoing.
+**Ships publicly**: this phase IS the announcement.
 
-**Goal**: make the site shareable and discoverable.
+**Goal**: flip the site from unlisted to public and announce it, with everything a first-wave visitor or crawler touches in order.
 
-### 8.1 SEO and metadata
+### 5.1 Indexing infrastructure
 
-**Do**:
-- Per-section OG images via Vercel OG
-- Schema.org `Article` markup on editorial sections, `Dataset` on data sections
-- Sitemap at `/sitemap.xml`, robots.txt
-- Target keywords in page titles and meta descriptions: "Waymo financials", "Waymo revenue", "Waymo unit economics", "Waymo valuation", "Waymo cities"
+**Do**: sitemap.xml, robots.txt, per-section OG images via Vercel OG (landing, landscape, financials, earnings, milestones, methodology), Schema.org markup (Article on editorial sections, Dataset on data sections), page titles and meta descriptions per v1 8.1 keyword targets plus landscape terms ("robotaxi comparison", "Zoox vs Waymo", "AV deployment tracker").
 
-### 8.2 Share features
+### 5.2 Domain and auth
 
-**Do**:
-- "Share this chart" button on every chart; generates a PNG with data embedded for direct tweeting
-- Deep-link state on interactive components (unit economics calculator, valuation framework)
+**Do**: the `pre-launch.md` checklist items: custom domain in Vercel plus DNS (user provides the domain; surface if none chosen), Supabase Auth Site URL and redirect allowlist update, magic-link retest against the new domain, methodology contact email swap (or user approves keeping the gmail).
 
-### 8.3 Email capture
+### 5.3 Final freshness and correctness pass
 
-**Do**:
-- Small email form in the footer: "Get quarterly research updates"
-- Posts to a simple `email_subscribers` table (no double opt-in complexity in v1)
-- No gating on site content
+**Do**: verify latest CPUC quarter present; every landscape snapshot as-of within a quarter; implied P&L reflects the latest reported Alphabet quarter; run the full pre-launch checklist; Lighthouse pass (95+ performance, 100 accessibility per v1 8.4); one Playwright smoke test per public route if not already present.
 
-### 8.4 Performance and accessibility
+### 5.4 Flip and announce
 
-**Do**:
-- Lighthouse audit: target 95+ on performance, 100 on accessibility
-- Proper alt text on charts (text summary), keyboard nav on all interactive components, screen reader tested
+**Do**: set `SITE_PUBLIC=true` in Vercel production, redeploy, verify noindex headers gone and meta robots removed; submit sitemap to Google Search Console; user announces (LinkedIn/Substack content moments are the user's to write; offer drafts). Post-announce monitoring for the first week: watch Slack for scraper failures and Vercel logs for errors.
 
-### 8.5 Methodology changelog
-
-**Do**:
-- Turn `/methodology` into a versioned document with a changelog at the bottom tracking every methodology update
+**Acceptance**: site indexed, announcement out, no stale data visible on day one.
 
 ---
+
+## Phases 6-8: Post-announce roadmap
+
+Specified at heading level only; each gets a detailed module breakdown at phase start, using the v1 text as the base reference.
+
+**Phase 6: Unit economics** (v1 Phase 2, upgraded). The assumptions table, cost-per-mile waterfall, revenue per ride, interactive calculator with shareable URL state, city breakeven. Upgrade opportunity since v1: real disclosed anchors now exist for the model (Pony's claimed per-vehicle breakeven and 1/4-to-1/5 vehicle cost, Apollo Go's $28K RT6, WeRide's $40-50K per-vehicle annual service revenue projection), so the calculator can offer "Waymo baseline" and "China cost structure" presets. On completion, wire the COGS decomposition into the implied P&L (closing the Phase 4 simplification).
+
+**Phase 7: Safety** (v1 Phase 6). CPUC `incident_metrics` ingestion via the existing scraper, NHTSA SGO monthly scrape (now covering Waymo, Zoox, and Tesla incidents: comparative safety is now possible and is the section's editorial hook), CA DMV disengagement reports, safety dashboard with human-baseline comparisons and transparent methodology critique. The recall histories (Waymo's six, Zoox's four, Tesla's investigation) become a maintained timeline.
+
+**Phase 8: Outlook, valuation, polish** (v1 Phases 7 and 8 remainder). Bull/bear cases with explicit probabilities, valuation framework and scenario builder (moved from Phase 4), share-this-chart PNG generation, email capture, methodology changelog.
+
+---
+
+## Decisions log and open decisions
+
+Decided 2026-08-15: CPUC series stays, scraper rebuilt against cpuc.ca.gov directly (2.2). National disclosed-metrics time series built in Phase 2 (2.3), not deferred to Phase 4.
+
+Open (surface before or during the named module):
+
+1. **City status enum** for employee-only driverless markets (2.4): new status value vs. mapping. Recommendation: new 'employee' value.
+2. **Announced-cities inclusion policy** (2.4): full announced list vs. only dated/operating markets. Recommendation: only dated/operating.
+3. **Operator roster** for companies table additions (3.1): majors only vs. including Avride/May Mobility/Motional/Nuro/Didi. Recommendation: include; rows are cheap, the table filters.
+4. **Landscape map approach** (3.3): extend CoverageMap vs. separate lighter component.
+5. **Extraction model** (4.4): current Anthropic lineup choice to replace the pinned April 2026 Sonnet string; also whether extraction cost ceiling matters (expected low; Alphabet publishes ~8 documents/quarter).
+6. **Transcript source** (4.3): Motley Fool accessibility re-check; fallback selection if blocked.
+7. **Custom domain** (5.2): needs a decision and registrar access before Phase 5.
+8. **Zoox CPUC pilot data availability** (3.4): investigate before building; may be manual-entry only if no structured mirror exists.
 
 ## Cross-cutting requirements
 
-- **No em dashes** in any user-facing content. Use commas, semicolons, colons, or parentheses. This applies to UI strings, tooltip text, glossary definitions, editorial copy, and any content generated programmatically.
-- **Caching**: every public page uses ISR with a 1-hour revalidation by default; admin mutations trigger on-demand revalidation of affected pages.
-- **Scraper etiquette**: respect robots.txt, use the `SCRAPER_USER_AGENT` env var including a contact email, rate-limit requests (minimum 2 seconds between requests per source), cache aggressively.
-- **Legal**: display "The Empty Seat is an independent research project. Not affiliated with Waymo, Alphabet, or any mentioned company. Not investment advice." in the footer on every page.
-- **Accessibility**: every interactive component keyboard-navigable, every chart has a text summary, color contrasts meet WCAG AA.
+Carried over from v1 unchanged: no em dashes anywhere (including this document, UI strings, and commit messages); ISR with on-demand revalidation on admin writes; scraper etiquette (robots.txt, `SCRAPER_USER_AGENT`, 2-second delays, raw documents to Storage, `pending_review` for scraped data); the footer legal disclaimer; WCAG AA accessibility; testing expectations per v1 (fixture-based scraper tests, smoke tests per route, don't over-invest early).
 
-## Testing expectations
-
-- Component-level: critical UI components (Tooltip, Metric, UnitEconomicsCalculator, ImpliedPnL table) have lightweight Jest or Vitest tests for key behaviors
-- Scraper-level: every scraper has a test that runs against a local fixture file (don't test against live third-party sites in CI)
-- E2E: one Playwright smoke test per public route confirming it renders without error
-
-Don't over-invest in tests early. Priority is shipping phases; tests where they protect critical paths (money numbers, extraction correctness).
+Working agreement carried over from `CLAUDE.md` unchanged: module by module, no chaining, commit per module, show migrations and non-trivial component structures before building, browser verification for anything touching auth or routing, flag rather than deviate, never fabricate data (UNVERIFIED briefing items stay out of the database), architecture.md maintenance block every module.
 
 ## Effort estimate
 
 | Phase | Scope | Effort (weekends) | Public ship |
 |---|---|---|---|
-| 0 | Foundation + tooltip system | 2 | No |
-| 1 | Thesis + Operations | 3 | Yes |
-| 2 | Unit Economics | 3 | Yes |
-| 3 | Implied P&L + Financials | 3 | Yes |
-| 4 | Earnings extraction | 4 | Yes |
-| 5 | Competitive Landscape | 2 | Yes |
-| 6 | Safety | 2 | Yes |
-| 7 | Bull/Bear | 1 | Yes |
-| 8 | Polish | 2 | Ongoing |
+| 2 | Re-entry and freshness | 2-3 | Deploy only |
+| 3 | Competitive landscape | 2-3 | Deploy only |
+| 4 | Financials + extraction engine | 4-5 | Deploy only |
+| 5 | Launch | 1 | Announcement |
+| 6 | Unit economics | 3 | Yes |
+| 7 | Safety | 2 | Yes |
+| 8 | Outlook, valuation, polish | 2-3 | Yes |
 
-Roughly 22 weekends total. Phases 2, 3, and 4 carry the site. Ship each phase with a content moment on LinkedIn and Substack.
+Roughly 8-11 weekends to announcement at an opportunistic pace. The automation investment in Phase 4 is what makes the opportunistic pace survivable: after Phase 5, a month away from the project should cost freshness in exactly one place (manual disclosed-metrics entries), not everywhere.
 
 ## How Claude Code should work through this plan
 
-Read this document in full before starting any phase. Work module by module (e.g., 0.1, then 0.2, then 0.3). After each module, summarize what was built, propose the next commit message, and wait for approval before proceeding to the next module. Do not chain modules. Surface any ambiguity before writing code. When the plan is incomplete (e.g., specific copy text, specific environment variable values, specific source URLs), ask the user. When uncertain whether a deviation from the plan is warranted, flag it for the user rather than silently deviating.
+Read `CLAUDE.md`, `architecture.md`, and this document in full before starting any phase. Work module by module. After each module: summarize what was built, update `architecture.md` in the same commit, propose the commit message, wait for approval. Do not chain modules. Phase 2.1's audit findings may amend this plan; the plan changes through the user, not silently. When a briefing fact is about to enter the database, re-verify it against the primary source first; the briefing is a map, not the territory.

@@ -5,19 +5,17 @@ changes any of: schema, routes, components, conventions, integrations,
 or debt. Read this at the start of every planning conversation and
 before any orientation report.
 
-This file is not the plan (see dev-plan.md) and not the working
-agreement (see CLAUDE.md). It is the answer to "what currently exists
-and what's known about it."
-
-Hard rule: keep this file under 500 lines. Consolidate when it grows past that.
+This file is not the plan (see dev-plan.md) and not the working agreement
+(see CLAUDE.md). It answers "what currently exists and what's known about
+it." Hard rule: keep this file under 500 lines; consolidate past that.
 
 ---
 
 ## Last updated
 
-Module: 1.6
-Date: 2026-05-02
-Commit: 1.6 work
+Module: 2.1 (dev plan v2)
+Date: 2026-08-15
+Commit: 2.1 work
 
 ---
 
@@ -389,6 +387,20 @@ revalidates /methodology and /methodology/sources.
 
 **Pre-launch:** see `pre-launch.md` at repo root.
 
+**Resumption audit findings (2026-08-15, module 2.1):**
+- CPUC scraper source dead: Robotaxi Tracker removed the JSON mirror (data
+  paths serve homepage HTML). 16 green Actions runs since May ingested
+  nothing (404 = silent skip). DB holds Q1-Q4 2025 only. Rebuild direct
+  against cpuc.ca.gov in 2.2 with overdue-quarter Slack WARN semantics.
+- Stray ride_estimates row (2026-03-21/27, 500000/wk) duplicates the
+  disclosed metric; corrupts chart and KeyStats sums. Delete in 2.2.
+- KeyStats and chart sum ALL quarters but label them "2025"; "filed
+  February 2026" copy hardcoded. Fix in 2.6.
+- Timeline and map popup collapse 'waitlist' into "Announced" (fix 2.6);
+  scraper-health cron still the 0.7 placeholder (wire for real in 2.2).
+- Supabase auto-pause resumed and repo made public 2026-08-15. tsc and
+  eslint pass clean on a fresh install.
+
 **Structural debt:**
 - **Magic-link verification pending:** admin click-through against prod was deferred from 1.6 due to Supabase email rate limit; provisional based on Site URL fix.
 - **Broken delete confirm on companies/[id]:** `onSubmit={() => confirm(...) ||
@@ -408,9 +420,9 @@ revalidates /methodology and /methodology/sources.
 - City detail pages not built; timeline shows disabled links.
 - `service_area_geojson` exists but unused; polygon rendering deferred.
 - All public routes except /, /milestones*, /methodology* are stubs.
-- Quantitative metrics are California-only; no per-quarter data for other states.
-- QuarterlyTripsChart has Q1-Q4 2025 only; pre-2025 CPUC baseline deferred to Phase 4.
-- CPUC incident_metrics and monthly_trends not ingested; Phase 6 territory.
+- Quantitative series are CA-only until 2.3 (national disclosed metrics)
+  lands; pre-2025 CPUC baseline deferred to Phase 4.
+- CPUC incident_metrics not ingested; safety-phase territory.
 - lib/supabase/types.ts manually patched for 0006, 0007; regenerate after migrations.
 
 ---
@@ -418,8 +430,8 @@ revalidates /methodology and /methodology/sources.
 ## Parking lot
 
 - State-level fill on coverage map (US states colored by Waymo stage). Deferred 1.2.c.
-- Robotaxi Tracker as corroborating signal alongside CPUC data. Phase 5 territory.
-- Pre-2025 CPUC baseline via cpuc.ca.gov extraction. Phase 4 (overlaps SEC EDGAR).
+- Robotaxi Tracker as corroborating signal (landscape phase); pre-2025 CPUC
+  baseline via cpuc.ca.gov extraction (Phase 4, overlaps SEC EDGAR).
 
 ---
 
@@ -443,13 +455,9 @@ app/
     login/                     magic link page
     (protected)/
       layout.tsx               session auth gate
-      cities/                  CRUD (list, new, [id])
-      companies/               CRUD
-      milestones/              CRUD + publish toggle
-      sources/                 CRUD
-      fleet-snapshots/         CRUD
-      ride-estimates/          CRUD
-      financial-periods/       CRUD
+      cities/ companies/ milestones/ sources/ fleet-snapshots/
+      ride-estimates/ financial-periods/   full CRUD (list, new, [id]);
+                                 milestones adds publish toggle
       site-content/            list + [key] edit
   api/
     cron/scraper-health/       daily health check
@@ -469,15 +477,11 @@ components/
   milestones/                  MilestoneCard
 
 lib/
-  cohorts.ts
-  disclosed-metrics.ts
-  site-content.ts
+  cohorts.ts, disclosed-metrics.ts, site-content.ts, notify.ts,
+  last-updated.ts
   glossary/index.ts
-  milestones/
-    tags.ts
-  notify.ts
-  scrapers/
-    cpuc.ts
+  milestones/tags.ts
+  scrapers/cpuc.ts
   supabase/                    server.ts, admin.ts, browser.ts, types.ts
 
 supabase/
@@ -485,13 +489,9 @@ supabase/
   seed.sql                     6 company rows only
 
 scripts/
-  seed-cities.ts               one-time city seed (11 Waymo cities)
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
-  seed-recent-waymo-milestones.ts  6 seed milestones (one-time, idempotent)
-  seed-methodology-content.ts  upserts methodology_body into site_content
-  update-methodology-disclosed-source.ts  prepends two-tier sourcing para to methodology_body
-  fix-disclosed-row-formatting.ts         one-time fix for malformed latest_weekly_rides_disclosed row
-  update-methodology-todos.ts             one-time replacement of methodology_body TODO blocks and contact email
+  seed-*.ts, update-*.ts, fix-*.ts   one-time seed and content-fix scripts
+                               (cities, milestones, methodology, site_content)
 
 .github/
   workflows/
