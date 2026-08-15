@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 3.3
+Module: 3.4
 Date: 2026-08-15
-Commit: 3.3 work
+Commit: 3.4 work
 
 ---
 
@@ -103,7 +103,10 @@ Columns: `id` (pk), `company_id` (fk), `city_id` (nullable fk),
 `period_start`, `period_end`, `rides_per_week` (normalized weekly),
 `avg_fare_usd` (nullable), `source_id` (nullable fk), `confidence`,
 `methodology_note`, `vehicle_miles_traveled` (nullable, 0007, CPUC VMT
-ZEV), `created_at`.
+ZEV), `program_id` (nullable fk operator_programs, 0011), `tier`
+('deployment' | 'pilot', nullable, 0011), `created_at`. Waymo's CPUC
+deployment series: company_id = waymo, city_id null, program_id null.
+Pilot series (Zoox, Nuro from Q2 2026): program_id set, tier 'pilot'.
 
 #### financial_periods
 Disclosed or modeled financials by fiscal period; `is_disclosed`
@@ -164,7 +167,8 @@ nullable), `after` (jsonb, nullable), `created_at`.
   site_content trigger; 0004 cities unique (company_id, name); 0005
   service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
   0008 disclosed_metrics; 0009 cities 'employee' status; 0010
-  operator programs, roles, competitor_snapshots, companies fields.
+  operator programs, roles, competitor_snapshots, companies fields; 0011
+  ride_estimates program_id + tier.
 
 ---
 
@@ -172,29 +176,38 @@ nullable), `after` (jsonb, nullable), `created_at`.
 
 ### Public routes
 
-| path | renders | data sources | revalidation |
-|------|---------|--------------|--------------|
-| / | ThesisHero, Thesis, KeyStats, Operations, RecentMilestones | ride_estimates, site_content, cities, milestones | ISR 3600s; on-demand from admin mutations |
-| /milestones | MilestoneCard listing, tag filter chips | milestones | ISR 3600s |
-| /milestones/[id] | full detail, source link, annotation | milestones, sources | ISR 3600s; 404 for drafts |
-| /methodology | MarkdownBody render of methodology_body from site_content; falls back to PLACEHOLDER const if key absent | site_content | ISR 3600s; on-demand when site_content admin saves |
-| /methodology/sources | Auto-generated source list grouped by publisher, sorted published_at DESC | sources | ISR 3600s; on-demand when sources admin mutates |
+All ISR 3600s with on-demand revalidation from the relevant admin
+mutations.
 
-| /landscape | intro (site_content landscape_intro), OperatorTable, SupervisionStrip, US OperatorMap, China/export prose (landscape_china) + world map, methodology (landscape_methodology) | operator_programs, roles, competitor_snapshots, cities, site_content | ISR 3600s; on-demand from programs/snapshots admin |
+| path | renders | data |
+|------|---------|------|
+| / | ThesisHero, Thesis, KeyStats, NationalTrajectory, Operations, RecentMilestones | ride_estimates, disclosed_metrics, site_content, cities, milestones |
+| /milestones, /milestones/[id] | listing with tag chips; detail with source and annotation (404 for drafts) | milestones, sources |
+| /methodology, /methodology/sources | methodology_body markdown; auto-generated source list by publisher | site_content, sources |
+| /landscape | intro, OperatorTable, SupervisionStrip, regulatory section (CpucComparisonChart + Tesla sidebar), US OperatorMap, China/export + world map, methodology | operator_programs, roles, competitor_snapshots, ride_estimates, cities, site_content |
 
-Other public routes (unit-economics, financials, earnings, safety,
-outlook) are planned but not yet built.
+Not yet built: /unit-economics, /financials, /earnings, /safety, /outlook.
 
 ### Admin routes
 
-Outer `app/admin/layout.tsx` is a passthrough with no auth check
-(keeps `/admin/login` public). Auth gate lives in
-`app/admin/(protected)/layout.tsx` which checks session and redirects
-to `/admin/login` if absent. All mutations use `supabaseAdmin`
-(service-role, bypasses RLS).
+Outer `app/admin/layout.tsx` is a passthrough (keeps `/admin/login`
+public); the auth gate is `app/admin/(protected)/layout.tsx` (session
+check, redirect to login). All mutations use `supabaseAdmin`. Every
+mutation revalidates "/" at minimum (2.6); milestones also /milestones;
+sources /methodology/sources; site-content /methodology(/sources);
+programs and snapshots /landscape.
 
-| path | purpose | mutations | revalidates |
-|------|---------|-----------|-------------|
+| path | purpose |
+|------|---------|
+| /admin/login, /auth/callback | magic link auth, Supabase callback |
+| /admin | dashboard with row counts |
+| /admin/{cities, companies, sources, fleet-snapshots, ride-estimates, financial-periods, disclosed-metrics, snapshots} | full CRUD (list, new, [id]); disclosed-metrics and snapshots show attribution/quality badges |
+| /admin/milestones | CRUD plus publish toggle |
+| /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
+| /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
+| /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
+
+------|---------|-----------|-------------|
 | /admin/login | magic link auth | n/a | n/a |
 | /admin | dashboard, row counts | none | n/a |
 | /admin/cities | list | none | n/a |
@@ -209,7 +222,7 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/programs | operator programs CRUD with role matrix (company x role checkboxes; roles replaced wholesale on save) | insert, update, delete | /landscape |
 | /admin/snapshots | competitor snapshots CRUD, quality badges | insert, update, delete | /landscape |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
-| /api/cron/scraper-health | daily CPUC freshness report to Slack (quarters in DB, pending, overdue) | none | n/a |
+| /api/cron/scraper-health | daily CPUC freshness report to Slack (deployment quarters, pilot rows, pending, overdue) | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
 
 Note: all admin mutations now revalidate "/" at minimum (2.6). Sources
@@ -282,6 +295,10 @@ also revalidates /methodology/sources; site-content revalidates
   or not yet public; human is legal driver) from `isDriverlessPublic()`
   and the `human_is_legal_driver` supervision value. Column hoisted to
   module scope (react-hooks/static-components).
+- **CpucComparisonChart (client):** Waymo deployment-tier vs pilot-tier
+  quarterly CA trips on a log scale (solid vs dashed lines); regulatory
+  data only. Fed by `getCpucComparison()`. Page shows a serif pending
+  state until pilot rows exist.
 - **OperatorMap (client) + OperatorMapClient:** separate lighter map from
   the Waymo CoverageMap (open decision 4 resolved): markers only, one
   color per program (`programColor()`), solid/ringed/hollow by status,
@@ -317,55 +334,43 @@ also revalidates /methodology/sources; site-content revalidates
 
 ### lib/
 
-- **lib/last-updated.ts:** `getGlobalLastUpdated()`: max timestamp across
-  8 data tables (excludes audit_log). Used by PageShell footer.
-- **lib/milestones/tags.ts:** `MILESTONE_TAGS` const array (8 slugs),
-  `MilestoneTag` type, `tagLabel(tag)` display-label function. Single
-  source of truth for tag vocabulary; imported by admin pages and public
-  pages alike. Current tags: new_city, technology, operations,
-  partnership, international, safety, financial, scale_metrics.
-- **lib/cohorts.ts:** `getCohortBucket(launchDate)` returns bucket
-  index (1-5), label, and hex color. `getBucketLegend(dates)` returns
-  sorted distinct buckets for legend rendering. Used by CoverageMap;
-  chart use removed in 1.3 (QuarterlyTripsChart uses accent color only).
-- **lib/cpuc-calendar.ts:** pure CPUC filing-calendar logic (deadlines
-  May 1/Aug 1/Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-
-  free by design; imported by scraper, health cron, AND client chart
-  components. Heavy scraper imports must never move here.
-- **lib/scrapers/cpuc.ts:** v2 (2.2). `runCpucScrape()` fetches quarterly
-  zips direct from cpuc.ca.gov (`waymo-deployment-YYYYqQ.zip`, stable since
-  2025 Q2), unzips in memory (fflate, sub-2MB CSVs only), parses the
-  Driverless AV_Month rollup by header name, sums the quarter, upserts
-  ride_estimates (restatements update in place). Small CSVs archived to
-  Storage `scraped-raw/cpuc/...`; per-quarter sources rows point at the zip
-  URL. Missing quarter past deadline+grace posts Slack WARN. Weekly runs
-  fetch missing plus two recent quarters; first-week runs re-verify all.
-  Fixture tests: `scripts/test-cpuc-parser.ts` (tsx, no framework).
-- **lib/disclosed-metrics.ts:** v2 (2.3), reads the `disclosed_metrics`
-  table. `getLatestDisclosedWeeklyRides()` returns the latest COMPANY-
-  attributed weekly_rides row joined to its source (null on none; callers
-  fall back to CPUC). `getDisclosedSeries(metric)` returns the full arc,
-  all attributions, ascending. Called by ThesisHero, KeyStats,
-  NationalTrajectory.
-- **lib/landscape.ts (server) + lib/landscape-types.ts (client-safe):**
-  split deliberately; the client components import types and label maps
-  from landscape-types, never the server module (which pulls in
-  supabase/server). `getLandscapePrograms()` joins programs, roles,
-  latest snapshot per program, and source; `getLandscapeCities()` and
-  `getWaymoCitiesForMap()` feed the operator map.
-- **lib/glossary/index.ts:** 23 terms after 3.3 (added supervision_level,
-  disclosure_quality, tcp_permit, nhtsa_exemption, standing_general_order).
-- **lib/site-content.ts:** `getSiteContent(key)` server helper. Landscape
-  keys: landscape_intro, landscape_china, landscape_methodology (seeded
-  by `scripts/seed-landscape-content.ts`, page falls back to inline copy).
-- **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack webhook.
-- **lib/supabase/server.ts:** session-bound client for RLS reads.
-- **lib/supabase/admin.ts:** service-role client, server-only.
-- **lib/supabase/browser.ts:** anon client for client components.
-- **lib/supabase/types.ts:** generated types, manually patched for
-  migrations 0006 (cities.external_keys) and 0007
-  (ride_estimates.vehicle_miles_traveled). Regenerate with
-  `supabase gen types typescript` after any future migration.
+- **last-updated.ts:** `getGlobalLastUpdated()` max timestamp across data
+  tables (PageShell footer). **milestones/tags.ts:** `MILESTONE_TAGS` (8
+  slugs) + `tagLabel()`, single source of tag vocabulary. **cohorts.ts:**
+  `getCohortBucket()` / `getBucketLegend()` for CoverageMap coloring.
+  **notify.ts:** `notifySlack(message, level)`. **site-content.ts:**
+  `getSiteContent(key)`. **glossary/index.ts:** 23 terms (3.3 added
+  supervision_level, disclosure_quality, tcp_permit, nhtsa_exemption,
+  standing_general_order).
+- **cpuc-calendar.ts:** pure filing-calendar logic (deadlines May 1/Aug 1/
+  Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-free;
+  shared by scraper, health cron, and client charts.
+- **scrapers/cpuc.ts:** `runCpucScrape()`. Deployment tier (2.2): fetches
+  `waymo-deployment-YYYYqQ.zip` from cpuc.ca.gov, fflate-unzips sub-2MB
+  CSVs, parses the Driverless AV_Month rollup by header, sums the
+  quarter, upserts Waymo ride_estimates (restatements update in place),
+  archives small CSVs to Storage `scraped-raw/cpuc/...`, per-quarter
+  sources rows. Overdue quarter past grace = Slack WARN. Pilot tier
+  (3.4): fetches `av-pilot-YYYYqQ.zip`, ingests `PILOT_CARRIERS` (Zoox,
+  Nuro) driverless month-level data per program with tier 'pilot';
+  absent carriers are "not in filing", not errors. Zoox files the CPUC
+  template as an xlsx: **scrapers/cpuc-xlsx.ts** is a minimal
+  dependency-free sheet reader (workbook + rels + sharedStrings + one
+  sheet) returning "Month-Level" rows; `extractPilotMonthCsv` handles CSV
+  or xlsx. Aurora/Tensor/WeRide pilot filings are non-template and out of
+  scope. Fixture tests: `scripts/test-cpuc-parser.ts` (21, tsx).
+- **disclosed-metrics.ts:** reads `disclosed_metrics`.
+  `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
+  (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
+  = full arc, all attributions (NationalTrajectory).
+- **landscape.ts (server) + landscape-types.ts (client-safe):** client
+  components import only from landscape-types. `getLandscapePrograms()`
+  joins programs, roles, latest snapshot, source; `getLandscapeCities()`
+  and `getWaymoCitiesForMap()` feed the map; `getCpucComparison()` builds
+  deployment-vs-pilot series (3.4).
+- **supabase/:** server.ts (session client), admin.ts (service role,
+  server-only), browser.ts (anon), types.ts (generated, hand-patched for
+  0006 through 0011; regenerate with `supabase gen types typescript`).
 
 ### External integrations
 
@@ -383,31 +388,30 @@ also revalidates /methodology/sources; site-content revalidates
 ## Conventions adopted
 
 - **Pending-state pattern:** section + Container always rendered; pending
-  branch is serif paragraph at `text-[2.25rem] sm:text-[3rem]`. No Card.
-- **Cohort coloring:** `getCohortBucket(launchDate)`. Used by CoverageMap.
-- **Revalidation:** server actions call `revalidatePath`. DB-level ISR
-  triggers deferred.
-- **Smooth scroll** (`scroll-behavior: smooth`, `scroll-mt-20` sections);
-  **lazy-loading** via `next/dynamic` `ssr: false` (CoverageMapClient);
-  **admin mutations** via `supabaseAdmin` server actions in page files.
+  branch is a serif paragraph (`text-[2.25rem] sm:text-[3rem]`), no Card.
+- **Cohort coloring** via `getCohortBucket(launchDate)` (CoverageMap).
+- **Revalidation:** server actions call `revalidatePath`; DB-level ISR
+  triggers deferred. **Smooth scroll** + `scroll-mt-20`; **lazy-loading**
+  via `next/dynamic` `ssr: false`; **admin mutations** via `supabaseAdmin`
+  server actions in page files, error pattern `Failed to <verb> <table>
+  row: ${error.message}` thrown before revalidate/redirect.
 - **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N)`.
-- **Derived copy:** dates, year labels, and "next filing due" text must be
-  computed from data or lib/cpuc-calendar, never hardcoded (2.2 rule).
-- **external_keys:** scrapers write city ids under their source slug; `{}` default.
-- **Confidence levels:** disclosed sources `'high'`; community/estimated `'medium'`/`'low'`.
-- **Methodology copy:** factual sections seeded by Claude Code; editorial
-  framing user-authored, marked by invisible `<!-- TODO -->` comments.
-  Content in `site_content` keyed `methodology_body`.
+- **Derived copy:** dates, year labels, "next filing due" computed from
+  data or lib/cpuc-calendar, never hardcoded (2.2 rule).
+- **Client/server lib split:** client components import only from
+  client-safe modules (landscape-types, cpuc-calendar); server data
+  modules that touch supabase/server are never imported by "use client"
+  files (3.3 rule, caught by the render harness).
+- **external_keys:** scrapers write city ids under their source slug.
+  **Confidence:** disclosed sources 'high'; community/estimated lower.
+- **Editorial copy in site_content:** factual sections seeded by Claude
+  Code with `// TODO: user to replace`; page components fall back to
+  inline copy when a key is absent (methodology_body, thesis_paragraphs,
+  landscape_intro/china/regulatory/methodology).
 - **Public route layout (canonical):** `app/(public)/layout.tsx` wraps all
-  `(public)` routes in PageShell; new public pages render content only.
-  Homepage at root is the exception (calls PageShell directly). The 1.4
-  milestones nav/footer bug came from this layout missing.
-- **Admin server action error pattern:** capture `{ error }`; on error
-  throw `Failed to <verb> <table> row: ${error.message}` before
-  `revalidatePath`/`redirect`. Uniform across all admin actions.
-- **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; default
-  unset. `proxy.ts` sets `X-Robots-Tag: noindex, nofollow, noarchive` on
-  public responses; root `generateMetadata` emits the matching `<meta>`.
+  `(public)` routes in PageShell; homepage at root is the exception.
+- **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; `proxy.ts`
+  sets `X-Robots-Tag` and root `generateMetadata` emits the `<meta>`.
 
 ---
 
@@ -479,16 +483,16 @@ components/
                              CoverageMap(+Client)
   milestones/                MilestoneCard
   landscape/                 OperatorTable, SupervisionStrip,
-                             OperatorMap(+Client)
+                             OperatorMap(+Client), CpucComparisonChart
   admin/                     ConfirmDeleteButton
 
 lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe)
-  glossary/index.ts, milestones/tags.ts, scrapers/cpuc.ts
+  glossary/index.ts, milestones/tags.ts, scrapers/cpuc.ts, scrapers/cpuc-xlsx.ts
   supabase/                  server, admin, browser, types
 
-supabase/                    migrations/ 0001-0010; seed.sql (6 companies)
+supabase/                    migrations/ 0001-0011; seed.sql (6 companies)
 scripts/                     run-scraper-cpuc, test-cpuc-parser, and
                              idempotent seed-*/update-*/fix-* scripts
 .github/workflows/           scrape-cpuc.yml (weekly Mon 13:17 UTC)

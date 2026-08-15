@@ -171,3 +171,118 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log("\nAll tests passed");
+
+// ---------------------------------------------------------------------------
+// Module 3.4: pilot-program xlsx path. Builds a minimal xlsx in memory with
+// the same structure Zoox files (workbook.xml with named sheets, rels,
+// sharedStrings, a Month-Level sheet with the CPUC template columns), then
+// runs it through readXlsxSheet and extractPilotMonthCsv. Values are Zoox's
+// real Q1 2026 driverless month-level figures.
+// ---------------------------------------------------------------------------
+
+import { zipSync as zipSync2, strToU8 as s2u } from "fflate";
+import { readXlsxSheet, rowsToCsv } from "@/lib/scrapers/cpuc-xlsx";
+import { extractPilotMonthCsv, PILOT_CARRIERS } from "@/lib/scrapers/cpuc";
+
+function buildXlsx(): Uint8Array {
+  const header = ["TCPID","Year","Month","TotalTrips","TotalWaiting","TotalVMTPeriod1","TotalVMTPeriod2","TotalVMTPeriod3","TotalVMTZEV","TotalPassengersCarried","TotalPMT"];
+  const shared = ["Cover", ...header, "0038380-P"];
+  const sIdx = (v: string) => shared.indexOf(v);
+  const cols = "ABCDEFGHIJK";
+  const rowsData: (string | number)[][] = [
+    header,
+    ["0038380-P", 2026, 1, 5219, 89.33, 19492.63, 4108.11, 8396.2, 31996.94, 6304, 10075.03],
+    ["0038380-P", 2026, 2, 7164, 117.78, 21179.29, 5453.89, 11533.02, 38162.55, 8482, 13511.97],
+    ["0038380-P", 2026, 3, 10685, 245.06, 25296.47, 8515.89, 17325.36, 51137.72, 12731, 20407.4],
+  ];
+  const sheetRows = rowsData
+    .map((r, ri) => {
+      const cells = r
+        .map((v, ci) => {
+          const ref = `${cols[ci]}${ri + 1}`;
+          if (typeof v === "string") return `<c r="${ref}" t="s"><v>${sIdx(v)}</v></c>`;
+          return `<c r="${ref}"><v>${v}</v></c>`;
+        })
+        .join("");
+      return `<row r="${ri + 1}">${cells}</row>`;
+    })
+    .join("");
+  const monthSheet = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`;
+  const coverSheet = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>`;
+  const workbook = `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Cover" sheetId="1" r:id="rId5"/><sheet name="Trip-Level" sheetId="2" r:id="rId6"/><sheet name="Month-Level" sheetId="3" r:id="rId7"/></sheets></workbook>`;
+  const rels = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId5" Type="x" Target="worksheets/sheet1.xml"/><Relationship Id="rId6" Type="x" Target="worksheets/sheet2.xml"/><Relationship Id="rId7" Type="x" Target="worksheets/sheet3.xml"/></Relationships>`;
+  const sst = `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${shared.map((t) => `<si><t>${t}</t></si>`).join("")}</sst>`;
+  return zipSync2({
+    "xl/workbook.xml": s2u(workbook),
+    "xl/_rels/workbook.xml.rels": s2u(rels),
+    "xl/sharedStrings.xml": s2u(sst),
+    "xl/worksheets/sheet1.xml": s2u(coverSheet),
+    "xl/worksheets/sheet2.xml": s2u(coverSheet),
+    "xl/worksheets/sheet3.xml": s2u(monthSheet),
+  });
+}
+
+const ZOOX_Q1_TRIPS = 5219 + 7164 + 10685; // 23,068
+const ZOOX_Q1_VMT = 31996.94 + 38162.55 + 51137.72; // 121,297.21
+
+test("readXlsxSheet finds Month-Level by name and resolves shared strings", () => {
+  const rows = readXlsxSheet(buildXlsx(), "Month-Level");
+  assert.equal(rows[0][0], "TCPID");
+  assert.equal(rows[0][3], "TotalTrips");
+  assert.equal(rows[1][0], "0038380-P");
+  assert.equal(rows[1][3], "5219");
+  assert.equal(rows.length, 4);
+});
+
+test("readXlsxSheet errors clearly on a missing sheet", () => {
+  assert.throws(() => readXlsxSheet(buildXlsx(), "Nope"), /not found; sheets: Cover, Trip-Level, Month-Level/);
+});
+
+test("xlsx month sheet round-trips through rowsToCsv and parseMonthCsv", () => {
+  const csv = rowsToCsv(readXlsxSheet(buildXlsx(), "Month-Level"));
+  const totals = aggregateQuarter(parseMonthCsv(csv), { year: 2026, q: 1 });
+  assert.equal(totals.monthsFound, 3);
+  assert.equal(totals.totalTrips, ZOOX_Q1_TRIPS);
+  assert.ok(Math.abs(totals.totalVmtZev - ZOOX_Q1_VMT) < 0.01);
+});
+
+test("extractPilotMonthCsv reads Zoox xlsx from the pilot zip layout", () => {
+  const zip = zipSync2({
+    "AV Pilot 2026Q1/Zoox/(PUBLIC) 2026-05-01 Zoox Q1 2026 CPUC Quarterly Report - Data Tables Driverless.xlsx": buildXlsx(),
+    "AV Pilot 2026Q1/Zoox/(PUBLIC) 2026-05-01 Zoox Q1 2026 CPUC Quarterly Report - Data Tables Drivered.xlsx": buildXlsx(),
+    "AV Pilot 2026Q1/Zoox/2026-05-01 Zoox Q1 2026 CPUC Quarterly Report - Cover Letter.pdf": s2u("%PDF"),
+    "AV Pilot 2026Q1/Waymo/Driverless Pilot/PSG0038152_2026_05_AV_Month_Part0.csv": s2u("TCPID,Year,Month,TotalTrips,TotalVMTZEV\nx,2026,1,1,1\n"),
+  });
+  const zoox = PILOT_CARRIERS.find((c) => c.folder === "Zoox")!;
+  const out = extractPilotMonthCsv(zip, zoox);
+  assert.ok(out, "expected extraction");
+  const totals = aggregateQuarter(parseMonthCsv(out!.monthCsv), { year: 2026, q: 1 });
+  assert.equal(totals.totalTrips, ZOOX_Q1_TRIPS);
+  // PDFs excluded, extracted CSV always archived
+  assert.ok(out!.archivable.some((f) => f.name.endsWith("month-level-extracted.csv")));
+  assert.ok(!out!.archivable.some((f) => /\.pdf$/i.test(f.name)));
+});
+
+test("extractPilotMonthCsv prefers CSV template when a carrier files CSVs", () => {
+  const csv = "TCPID,Year,Month,TotalTrips,TotalVMTZEV\nN,2026,4,100,10\nN,2026,5,200,20\nN,2026,6,300,30\n";
+  const zip = zipSync2({
+    "AV Pilot 2026Q2/Nuro/Driverless Pilot/TCP47827_2026_08_AV_Month_Part0.csv": s2u(csv),
+  });
+  const nuro = PILOT_CARRIERS.find((c) => c.folder === "Nuro")!;
+  const out = extractPilotMonthCsv(zip, nuro);
+  assert.ok(out);
+  const totals = aggregateQuarter(parseMonthCsv(out!.monthCsv), { year: 2026, q: 2 });
+  assert.equal(totals.totalTrips, 600);
+});
+
+test("extractPilotMonthCsv returns null when the carrier folder is absent", () => {
+  const zip = zipSync2({ "AV Pilot 2026Q1/Zoox/x.pdf": s2u("%PDF") });
+  const nuro = PILOT_CARRIERS.find((c) => c.folder === "Nuro")!;
+  assert.equal(extractPilotMonthCsv(zip, nuro), null);
+});
+
+if (failures > 0) {
+  console.error(`\n${failures} test(s) failed (pilot section)`);
+  process.exit(1);
+}
+console.log("Pilot tests passed");

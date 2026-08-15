@@ -99,3 +99,18 @@ export function isDriverlessPublic(p: LandscapeProgram): boolean {
     (s.cities_serving_public ?? 0) > 0
   );
 }
+
+// CPUC regulatory comparison series (module 3.4).
+export interface CpucSeriesPoint {
+  quarter: string;
+  period_start: string;
+  trips: number;
+  vmt: number | null;
+}
+
+export interface CpucComparisonSeries {
+  key: string;
+  label: string;
+  tier: "deployment" | "pilot";
+  points: CpucSeriesPoint[];
+}

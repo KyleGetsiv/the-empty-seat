@@ -61,8 +61,13 @@ export async function GET(request: Request) {
     ? Math.floor((now.getTime() - latestIngest) / 86_400_000)
     : null;
 
+  const { count: pilotCount } = await supabaseAdmin
+    .from("ride_estimates")
+    .select("id", { count: "exact", head: true })
+    .eq("tier", "pilot");
+
   const summary = [
-    `Scraper health: ${present.size} CPUC quarters in DB` +
+    `Scraper health: ${present.size} CPUC deployment quarters, ${pilotCount ?? 0} pilot rows in DB` +
       (daysSinceIngest !== null
         ? `, last ingest ${daysSinceIngest}d ago.`
         : "."),

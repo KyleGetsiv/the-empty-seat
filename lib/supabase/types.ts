@@ -559,8 +559,10 @@ export type Database = {
           methodology_note: string | null
           period_end: string
           period_start: string
+          program_id: string | null
           rides_per_week: number
           source_id: string | null
+          tier: string | null
           vehicle_miles_traveled: number | null
         }
         Insert: {
@@ -575,6 +577,7 @@ export type Database = {
           period_start: string
           rides_per_week: number
           source_id?: string | null
+          tier?: string | null
           vehicle_miles_traveled?: number | null
         }
         Update: {
@@ -587,11 +590,20 @@ export type Database = {
           methodology_note?: string | null
           period_end?: string
           period_start?: string
+          program_id?: string | null
           rides_per_week?: number
           source_id?: string | null
+          tier?: string | null
           vehicle_miles_traveled?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "ride_estimates_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "operator_programs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ride_estimates_city_id_fkey"
             columns: ["city_id"]

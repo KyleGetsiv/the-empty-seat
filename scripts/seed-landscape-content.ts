@@ -1,6 +1,6 @@
 // scripts/seed-landscape-content.ts
 // Module 3.3: seeds the three admin-editable site_content keys used by the
-// landscape page (landscape_intro, landscape_china, landscape_methodology)
+// landscape page (landscape_intro, landscape_china, landscape_regulatory, landscape_methodology)
 // with the same placeholder copy the page falls back to, so the user can
 // edit in /admin/site-content rather than in code. Idempotent upsert; does
 // NOT overwrite a key that already exists (user edits win).
@@ -40,6 +40,10 @@ This page tracks each program at the fidelity its own disclosures allow. Where a
 Two caveats travel with those numbers. Chinese fares are lower, so ride counts do not translate to comparable revenue. And the industry hit a wall this spring: a mass outage that froze roughly a hundred Apollo Go vehicles on Wuhan streets in March triggered a nationwide freeze on new permits from April to late July, and Wuhan resumed with safety drivers back in the cars.
 
 The more consequential development for US observers is the export. Apollo Go and WeRide run driverless commercial service in Dubai and Abu Dhabi on the Uber app; Pony.ai operates in Zagreb, Doha, Singapore, and Seoul and has committed 2,000 vehicles across five European cities with Uber. Uber is the common rail for nearly every non-Waymo operator on earth, which is a fact about Uber as much as about any of them.`,
+
+  landscape_regulatory: `The most honest comparison available in the United States comes from the California Public Utilities Commission, which requires every permitted operator to file the same quarterly data template. Waymo files in the Deployment tier (paid public service). Zoox files in the Pilot tier (passengers allowed, fares not), and Nuro joins the Pilot tier from the second quarter of 2026. Same regulator, same columns, same cadence.
+
+The gap is enormous and the chart does not hide it: Waymo completed roughly 3.9 million California trips in the first quarter of 2026; Zoox completed about 23,000. But the shape of Zoox's line matters more than its level. Its monthly driverless trips doubled across the quarter, from 5,219 in January to 10,685 in March, before it had charged a single fare. When Nuro's first filing lands, the same chart will show whether the Uber program is following that curve.`,
 
   landscape_methodology: `Every figure on this page is a point-in-time reading with a stated disclosure quality: a regulatory filing, an earnings disclosure, a company statement, press reporting, or an estimate. Blank cells mean the operator has not disclosed the figure. Third-party figures are never used for headline claims. Sources are linked from each disclosure badge and cataloged on the sources page. Snapshots are updated as new disclosures land; the as-of date on each row is the date of the underlying disclosure, not the date it was entered here.`,
 };

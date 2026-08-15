@@ -289,7 +289,7 @@ competitor_snapshots
 - Build a modest comparison chart on the landscape page: Waymo deployment trips vs. Zoox pilot trips, CA only, log scale or dual annotation (the gap is orders of magnitude; the chart's honesty about that gap is the point).
 - Tesla gets a prose treatment instead: a short sourced sidebar on why Tesla does not appear in disclosed-data comparisons (no CPUC AV filings; the CPUC "is the driver" statement). This is more credible than a mixed-confidence chart, and more interesting.
 
-**Acceptance**: comparison renders from disclosed data only; Tesla sidebar sourced; methodology tooltip complete.
+**Acceptance**: comparison renders from disclosed data only; Tesla sidebar sourced; methodology tooltip complete. (Built 2026-08-15: migration 0011, pilot ingestion with xlsx reader, CpucComparisonChart, regulatory section with Tesla sidebar. Zoox Q1 2026 pilot: 23,068 driverless trips, doubling month over month.)
 
 ### 3.5 Ship checkpoint
 
@@ -400,7 +400,7 @@ Open (surface before or during the named module):
 5. **Extraction model** (4.4): current Anthropic lineup choice to replace the pinned April 2026 Sonnet string; also whether extraction cost ceiling matters (expected low; Alphabet publishes ~8 documents/quarter).
 6. **Transcript source** (4.3): Motley Fool accessibility re-check; fallback selection if blocked.
 7. **Custom domain** (5.2): needs a decision and registrar access before Phase 5.
-8. **Zoox CPUC pilot data availability** (3.4): investigate before building; may be manual-entry only if no structured mirror exists.
+8. ~~Zoox CPUC pilot data availability~~ Resolved 2026-08-15: Zoox files the CPUC template as an xlsx inside the pilot zip (Month-Level sheet, same columns); scraper reads it directly. Aurora/Tensor/WeRide pilot filings are non-template and out of scope.
 
 ## Cross-cutting requirements
 

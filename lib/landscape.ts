@@ -13,6 +13,8 @@ import type {
   LandscapeSnapshot,
   LandscapeProgram,
   LandscapeCity,
+  CpucSeriesPoint,
+  CpucComparisonSeries,
 } from "./landscape-types";
 
 export type * from "./landscape-types";
@@ -142,4 +144,71 @@ export async function getWaymoCitiesForMap(): Promise<LandscapeCity[]> {
     longitude: Number(c.longitude),
     notes: c.notes,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// CPUC regulatory comparison (module 3.4): Waymo deployment-tier trips vs
+// pilot-tier trips per program (Zoox, Nuro), CA only, by quarter.
+// ---------------------------------------------------------------------------
+
+function quarterLabelFrom(periodStart: string): string {
+  const d = new Date(periodStart + "T00:00:00Z");
+  return `Q${Math.floor(d.getUTCMonth() / 3) + 1} ${d.getUTCFullYear()}`;
+}
+
+export async function getCpucComparison(): Promise<CpucComparisonSeries[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data: waymo } = await supabase.from("companies").select("id").eq("slug", "waymo").single();
+
+  const [{ data: waymoRows }, { data: pilotRows }] = await Promise.all([
+    waymo
+      ? supabase
+          .from("ride_estimates")
+          .select("period_start, period_end, rides_per_week, vehicle_miles_traveled")
+          .eq("company_id", waymo.id)
+          .is("city_id", null)
+          .is("program_id", null)
+          .order("period_start", { ascending: true })
+      : Promise.resolve({ data: [] as never[] }),
+    supabase
+      .from("ride_estimates")
+      .select("period_start, period_end, rides_per_week, vehicle_miles_traveled, program:operator_programs(slug, display_name)")
+      .eq("tier", "pilot")
+      .order("period_start", { ascending: true }),
+  ]);
+
+  const series: CpucComparisonSeries[] = [];
+
+  // Waymo deployment: only quarter-length rows (defensive, same as KeyStats).
+  const wPoints: CpucSeriesPoint[] = (waymoRows ?? [])
+    .filter((r) => {
+      const span =
+        (new Date(r.period_end + "T00:00:00Z").getTime() - new Date(r.period_start + "T00:00:00Z").getTime()) / 86_400_000;
+      return span >= 80;
+    })
+    .map((r) => ({
+      quarter: quarterLabelFrom(r.period_start),
+      period_start: r.period_start,
+      trips: (r.rides_per_week ?? 0) * 13,
+      vmt: r.vehicle_miles_traveled == null ? null : Number(r.vehicle_miles_traveled),
+    }));
+  if (wPoints.length > 0) {
+    series.push({ key: "waymo", label: "Waymo (deployment tier)", tier: "deployment", points: wPoints });
+  }
+
+  const byProgram = new Map<string, CpucComparisonSeries>();
+  for (const r of pilotRows ?? []) {
+    const p = r.program as unknown as { slug: string; display_name: string } | null;
+    if (!p) continue;
+    const s = byProgram.get(p.slug) ?? { key: p.slug, label: `${p.display_name} (pilot tier)`, tier: "pilot" as const, points: [] };
+    s.points.push({
+      quarter: quarterLabelFrom(r.period_start),
+      period_start: r.period_start,
+      trips: (r.rides_per_week ?? 0) * 13,
+      vmt: r.vehicle_miles_traveled == null ? null : Number(r.vehicle_miles_traveled),
+    });
+    byProgram.set(p.slug, s);
+  }
+  series.push(...byProgram.values());
+  return series;
 }
