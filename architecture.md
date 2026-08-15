@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 4.2
+Module: 4.3
 Date: 2026-08-15
-Commit: 4.2 work
+Commit: 4.3 work
 
 ---
 
@@ -23,9 +23,9 @@ Commit: 4.2 work
 #### companies
 Reference table, 14 rows after 4.2 (Waymo, Zoox, Tesla, Nuro, Lucid,
 Uber, Avride, May Mobility, Motional, Pony.ai, WeRide, Baidu Apollo Go,
-Didi, plus Alphabet as SEC filer, not an operator). Columns: `id`, `slug` (unique), `display_name`, `founded_year`,
-`parent_company`, `hq_country`, `ownership`, `status_summary` (last
-three 0010), timestamps.
+Didi, plus Alphabet as SEC filer, not an operator). Columns: `id`, `slug`
+(unique), `display_name`, `founded_year`, `parent_company`, `hq_country`,
+`ownership`, `status_summary` (last three 0010), timestamps.
 
 #### operator_programs, operator_program_roles (0010)
 A program is the unit on the landscape page: the thing on the road.
@@ -52,9 +52,9 @@ Seeded 3.2 (11 rows); Apollo Go and Pony need a Q2 refresh after
 
 #### sources
 Every primary source linked to a data point; scrapers and admins both
-insert. Columns: `id` (pk), `url`, `publisher`, `title`, `published_at`
-(nullable), `scraped_at` (nullable), `content_hash` (nullable, scraper
-dedupe), `storage_key` (nullable, raw doc in Storage), `created_at`.
+insert. Columns: `id`, `url`, `publisher`, `title`, `published_at`,
+`scraped_at`, `content_hash` (scraper dedupe), `storage_key` (raw doc in
+Storage), `created_at`.
 
 #### cities
 One row per city per company. `status` check (0009): 'announced',
@@ -71,17 +71,14 @@ Columns: `id`, `company_id`, `name` (unique with company_id, 0004),
 
 #### milestones
 Dated events in Waymo's history; drafts (`is_published = false`) are
-admin-only via RLS. Columns: `id` (pk), `company_id` (fk), `event_date`,
-`headline`, `body` (nullable markdown), `tags` (text[], nullable),
-`source_id` (nullable fk), `kyle_annotation` (nullable), `is_published`
-(default false), `created_at`, `updated_at`.
+admin-only via RLS. Columns: `id`, `company_id`, `event_date`, `headline`,
+`body` (markdown), `tags` (text[]), `source_id`, `kyle_annotation`,
+`is_published` (default false), timestamps.
 
 #### fleet_snapshots
-Point-in-time vehicle counts per company/city. `city_id` nullable for
-company-wide snapshots. Columns: `id` (pk), `company_id`, `city_id`
-(nullable, fk cities), `snapshot_date`, `vehicle_count`,
-`active_vehicle_count` (nullable), `source_id` (nullable), `notes`
-(nullable), `created_at`.
+Point-in-time vehicle counts; `city_id` null = company-wide. Columns:
+`id`, `company_id`, `city_id`, `snapshot_date`, `vehicle_count`,
+`active_vehicle_count`, `source_id`, `notes`, `created_at`.
 
 #### ride_estimates
 Ride volume estimates per company/city; `city_id` null = company-wide
@@ -97,11 +94,10 @@ Pilot series (Zoox, Nuro from Q2 2026): program_id set, tier 'pilot'.
 
 #### financial_periods
 Disclosed or modeled financials by fiscal period; `is_disclosed`
-separates filing-sourced from estimated. Columns: `id` (pk), `company_id`
-(fk), `fiscal_period` (e.g. 'Q1 2026'), `period_start`, `period_end`,
-`revenue_usd`, `opex_usd`, `capex_usd`, `operating_loss_usd` (all
-nullable numerics), `is_disclosed`, `source_id` (nullable fk),
-`methodology_note`, `created_at`, `updated_at`.
+separates filing-sourced from estimated. Columns: `id`, `company_id`,
+`fiscal_period` ('Q1 2026'), `period_start`, `period_end`, `revenue_usd`,
+`opex_usd`, `capex_usd`, `operating_loss_usd`, `is_disclosed`,
+`source_id`, `methodology_note`, timestamps.
 
 #### disclosed_metrics
 Point-in-time public disclosures (2.3), unique (company, metric, as_of).
@@ -207,28 +203,6 @@ programs and snapshots /landscape.
 | /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
 | /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
 | /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
-
-------|---------|-----------|-------------|
-| /admin/login | magic link auth | n/a | n/a |
-| /admin | dashboard, row counts | none | n/a |
-| /admin/cities | list | none | n/a |
-| /admin/cities/new | create | insert | / |
-| /admin/cities/[id] | edit, delete | update, delete | / |
-| /admin/milestones | list, publish toggle | update is_published | /admin/milestones, /milestones, / |
-| /admin/milestones/new | create | insert | /milestones, / |
-| /admin/milestones/[id] | edit, delete | update, delete | /milestones, / |
-| /admin/site-content | list + create new key form | insert | /admin/site-content/[key] |
-| /admin/site-content/[key] | edit | upsert | / |
-| /admin/disclosed-metrics | full CRUD, attribution badges | insert, update, delete | / |
-| /admin/programs | operator programs CRUD with role matrix (company x role checkboxes; roles replaced wholesale on save) | insert, update, delete | /landscape |
-| /admin/snapshots | competitor snapshots CRUD, quality badges | insert, update, delete | /landscape |
-| /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
-| /api/cron/scraper-health | daily CPUC freshness report to Slack (deployment quarters, pilot rows, pending, overdue) | none | n/a |
-| /auth/callback | Supabase auth callback | n/a | n/a |
-
-Note: all admin mutations now revalidate "/" at minimum (2.6). Sources
-also revalidates /methodology/sources; site-content revalidates
-/methodology and /methodology/sources.
 
 ---
 
@@ -368,6 +342,18 @@ also revalidates /methodology/sources; site-content revalidates
   before release date. SCRAPER_USER_AGENT with email required; 2s
   delays. Entry `scripts/run-scraper-edgar.ts [--since]`; tests
   `scripts/test-edgar-parser.ts` (6, real submissions fixture).
+- **scrapers/transcripts.ts (4.3):** `runTranscriptScrape({fromYear?})`
+  fetches Motley Fool transcripts (robots-permitted, verified 2026-08)
+  for `TRANSCRIPT_TARGETS` (Alphabet -> Waymo). No index page: URLs are
+  discovered by probing `candidateDates` (21-day window per quarter) via
+  `transcriptUrl`; existing (filer, fiscal_period) 'earnings_call'
+  events are skipped. `extractTranscriptParagraphs` (after H2 "Full
+  Conference Call Transcript", promo DIVs dropped) and
+  `groupSpeakerTurns` ("Name:" prefix, continuation paras) produce
+  page.html + turns.json at `scraped-raw/transcripts/{slug}/{yyyy}-q{q}/`;
+  creates sources (publisher 'The Motley Fool') and 'pending' events.
+  Entry `scripts/run-scraper-transcripts.ts [--from-year]`; tests
+  `scripts/test-transcript-parser.ts` (6).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -390,7 +376,7 @@ also revalidates /methodology/sources; site-content revalidates
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | model decided, not yet wired | ANTHROPIC_API_KEY | `claude-sonnet-5` for extraction (4.4) |
 | Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
-| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | scrape-cpuc.yml weekly Mon 13:17 UTC; scrape-edgar.yml daily 14:07 UTC (workflow_dispatch accepts `since`) |
+| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | scrape-cpuc.yml weekly Mon 13:17 UTC; scrape-edgar.yml daily 14:07 UTC (workflow_dispatch accepts `since`); scrape-transcripts.yml weekly Wed 15:11 UTC (workflow_dispatch accepts `from-year`) |
 | SEC EDGAR | live (4.2) | SCRAPER_USER_AGENT | data.sec.gov submissions API + Archives; fair-use headers; Alphabet CIK 0001652044 |
 
 ---
@@ -489,11 +475,11 @@ components/
 lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe)
-  glossary/index.ts, milestones/tags.ts, scrapers/{cpuc,cpuc-xlsx,sec-edgar}.ts
+  glossary/index.ts, milestones/tags.ts, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}.ts
   supabase/                  server, admin, browser, types
 
 supabase/                    migrations/ 0001-0012; seed.sql (6 companies)
-scripts/                     run-scraper-{cpuc,edgar}, test-{cpuc,edgar}-parser,
+scripts/                     run-scraper-{cpuc,edgar,transcripts}, test-*-parser,
                              and idempotent seed-*/update-*/fix-* scripts
-.github/workflows/           scrape-cpuc.yml (weekly), scrape-edgar.yml (daily)
+.github/workflows/           scrape-{cpuc,transcripts}.yml (weekly), scrape-edgar.yml (daily)
 ```

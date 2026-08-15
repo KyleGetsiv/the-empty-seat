@@ -323,6 +323,8 @@ As specified in v1 4.2 (`lib/scrapers/sec-edgar.ts`, daily GitHub Action, Alphab
 
 As specified in v1 4.3, with a pre-build check: verify Motley Fool transcripts remain accessible and robots.txt-permitted in August 2026; if not, surface alternatives (Seeking Alpha is generally paywalled; Alphabet's own IR site posts webcast transcripts/prepared remarks) before writing any scraper.
 
+(Built 2026-08-15. Pre-build check passed: fool.com robots.txt permits `/earnings/call-transcripts/` and the Q1 2026 Alphabet transcript renders as plain HTML. There is no reliable index page, so discovery probes candidate publication dates per quarter (a 21-day window from the usual release week) against the URL pattern `/earnings/call-transcripts/YYYY/MM/DD/alphabet-googl-qN-YYYY-earnings-call-transcript/`, skipping quarters already in `earnings_events`. Body parsing: paragraphs after the "Full Conference Call Transcript" heading, grouped into speaker turns by the inline "Name:" prefix. Raw page plus turns.json to Storage; weekly action `scrape-transcripts.yml`; 6 parser tests. If Fool changes its URL pattern or moves transcripts behind a wall, the weekly run reports 0 found and the health check will surface the staleness.)
+
 ### 4.4 Extraction pipeline
 
 As specified in v1 4.4 (chunking, structured extraction to the `waymo_mentions` schema, Zod validation, `extraction_version`, hourly cron), with two updates:
@@ -404,7 +406,7 @@ Open (surface before or during the named module):
 3. ~~Operator roster~~ Decided 2026-08-15: include minor operators; Nuro/Lucid/Uber elevated to first-class with role modeling (see 3.1).
 4. **Landscape map approach** (3.3): extend CoverageMap vs. separate lighter component.
 5. ~~Extraction model~~ Decided 2026-08-15: `claude-sonnet-5`.
-6. **Transcript source** (4.3): Motley Fool accessibility re-check; fallback selection if blocked.
+6. ~~Transcript source~~ Resolved 2026-08-15: Motley Fool robots-permitted and accessible; scraper built against it (4.3).
 7. **Custom domain** (5.2): needs a decision and registrar access before Phase 5.
 8. ~~Zoox CPUC pilot data availability~~ Resolved 2026-08-15: Zoox files the CPUC template as an xlsx inside the pilot zip (Month-Level sheet, same columns); scraper reads it directly. Aurora/Tensor/WeRide pilot filings are non-template and out of scope.
 

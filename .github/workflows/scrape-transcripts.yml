@@ -1,0 +1,40 @@
+name: Scrape earnings call transcripts
+
+on:
+  schedule:
+    # Weekly, Wednesdays 15:11 UTC. Alphabet's call is one evening a
+    # quarter and Motley Fool posts the transcript within a day or two;
+    # weekly polling with a 21-day date probe window catches it, and
+    # existing (filer, fiscal_period) events are skipped, so off-quarter
+    # runs are cheap (a handful of 404 probes at 2s spacing).
+    - cron: '11 15 * * 3'
+  workflow_dispatch:
+    inputs:
+      from-year:
+        description: 'Backfill: earliest fiscal year to probe (default 2024)'
+        required: false
+        default: ''
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run transcript scraper
+        run: |
+          if [ -n "${{ github.event.inputs.from-year }}" ]; then
+            npx tsx scripts/run-scraper-transcripts.ts --from-year "${{ github.event.inputs.from-year }}"
+          else
+            npx tsx scripts/run-scraper-transcripts.ts
+          fi
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SCRAPER_USER_AGENT: ${{ secrets.SCRAPER_USER_AGENT }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
