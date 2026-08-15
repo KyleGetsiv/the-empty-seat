@@ -122,9 +122,11 @@ After browser verification passes and before proposing the commit:
 
 - **Phase 0** (foundation) and **Phase 1** (thesis + operations): complete, April-May 2026.
 - **Phase 2** (resumption, dev plan v2): August 2026. CPUC scraper rebuilt against cpuc.ca.gov after the Robotaxi Tracker mirror died silently; `disclosed_metrics` table and the national trajectory chart added; city roster refreshed with the 'employee' status; milestones backfilled through August 2026.
+- **Phase 3** (competitive landscape): August 2026. Operator programs and roles, competitor snapshots with disclosure quality, `/landscape` page, CPUC deployment-vs-pilot comparison (Waymo, Zoox, Nuro from Q2 2026).
+- **Phase 4** (financials and extraction), in progress August 2026: 4.1 data model, 4.2 EDGAR scraper, 4.3 transcript scraper (Fool monthly sitemaps), 4.4 extraction pipeline (`lib/extraction/`, verbatim-verified quotes, per-event cost) built; 4.7 backfill run (33 events, all pending review). Next: 4.5 review queue polish, then 4.6, 4.8, 4.9, 4.10.
 - The site is deployed on Vercel behind the `SITE_PUBLIC` noindex gate, unannounced. Launch is Phase 5 of dev plan v2; the announce bar is fresh data, financials with the implied P&L, and multi-operator coverage.
 
-**Working agreement refinements (Phases 0-2):**
+**Working agreement refinements (Phases 0-4):**
 - Per-module commits, no chaining modules even when the next looks trivial
 - Auth and routing modules must be verified via a real browser flow before proposing a commit; build and lint cannot catch redirect loops (reference: 0.6 redirect loop on `/admin/login`)
 - No em dashes in commit messages, same as user-facing content; use colons or commas
@@ -132,6 +134,8 @@ After browser verification passes and before proposing the commit:
 - Next.js 16 uses `proxy.ts` with a `proxy` export instead of `middleware.ts`
 - Scraper failure semantics: a data source going missing must escalate (Slack WARN on overdue quarters), never register as a quiet success (reference: 16 green no-op runs, May-August 2026)
 - Third-party figures are storable but must carry attribution and never drive headline surfaces (reference: Tiger Global 450K)
+- Extraction output is never trusted as-is: every quote is verified verbatim against the stored source before it is written, and validation is per mention so one bad item never sinks an event (reference: 4.4 first backfill)
+- Scrapers must not probe: discover URLs from an index (sitemap, submissions API), never by guessing dates at 2s spacing (reference: fool.com 429 on the first transcript run)
 
 ## Maintenance of this file
 

@@ -411,8 +411,8 @@ programs and snapshots /landscape.
   server actions in page files, error pattern `Failed to <verb> <table>
   row: ${error.message}` thrown before revalidate/redirect.
 - **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N)`.
-- **Derived copy:** dates, year labels, "next filing due" computed from
-  data or lib/cpuc-calendar, never hardcoded (2.2 rule).
+  **Derived copy:** dates and "next filing due" computed from data or
+  lib/cpuc-calendar, never hardcoded (2.2 rule).
 - **Client/server lib split:** client components import only from
   client-safe modules (landscape-types, cpuc-calendar); modules that
   touch supabase/server are never imported by "use client" files.
@@ -436,7 +436,8 @@ programs and snapshots /landscape.
 **Structural debt:**
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
   0013) with `supabase gen types typescript --linked`; magic-link prod
-  click-through not re-verified since 1.6.
+  click-through not re-verified since 1.6; Baidu/Pony Q2 snapshot refresh
+  after 2026-08-18 earnings; 33 extracted events awaiting review.
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
   built; `service_area_geojson` unused.
@@ -461,12 +462,11 @@ app/
                              (list, [id]), methodology/ (page, sources/),
                              landscape/ (3.3)
   admin/                     layout.tsx passthrough; login/; (protected)/
-                             with auth-gate layout and CRUD dirs: cities,
-                             companies, milestones (+publish toggle),
-                             sources, fleet-snapshots, ride-estimates,
-                             financial-periods, disclosed-metrics, programs,
-                             snapshots, site-content ([key] edit), earnings
-                             (list + [id] review queue)
+                             auth-gate layout + CRUD dirs (cities, companies,
+                             milestones, sources, fleet-snapshots,
+                             ride-estimates, financial-periods,
+                             disclosed-metrics, programs, snapshots,
+                             site-content, earnings review queue)
   api/cron/scraper-health/   daily CPUC freshness report
 
 components/

@@ -345,6 +345,8 @@ As specified in v1 4.6 (`/earnings` timeline of events with approved mentions, m
 
 Run the backfill script for the last 8 quarters of Alphabet filings and calls (Q3 2024 through Q2 2026). This closes the UNVERIFIED item from the briefing (what was said about Waymo on the Q2 2026 call) and seeds the metrics-evolution view with the 100K -> 250K -> 500K weekly-rides disclosure arc.
 
+(Run 2026-08-15, ahead of order, as the first live use of 4.4: 26 SEC filings (Q2 2023 through Q2 2026) and 7 Motley Fool transcripts (Q1 2024, Q2 2024, Q4 2024, Q2 2025 through Q1 2026) extracted, 33 events total, about $1.50 in model cost. Fool did not publish Alphabet transcripts for Q3 2024 or Q2 2026; the Q2 2026 call is available from Alphabet IR (abc.xyz) and is the remaining gap for the UNVERIFIED item. All mentions are pending review; the highest-value approvals are the metric mentions in the 8-Ks and calls, which promote to disclosed_metrics.)
+
 ### 4.8 Other Bets walk
 
 As specified in v1 3.1: admin entry for Other Bets quarterly figures (the briefing has Q1/Q2 2026; backfill earlier quarters from filings ingested in 4.7), `OtherBetsWalk` chart separating the user-estimated Waymo share with explicit estimate labeling.
@@ -398,6 +400,8 @@ Specified at heading level only; each gets a detailed module breakdown at phase 
 ---
 
 ## Decisions log and open decisions
+
+Decided 2026-08-15 (Phase 4): extraction stays on the Anthropic API for now. Open-weight alternatives were reviewed via OpenRouter (DeepSeek V4 Flash at roughly 40x lower input cost, GLM 5.2 as the stronger fallback); the `ModelCaller` interface in `lib/extraction/extract.ts` is the seam for adding an OpenRouter caller and A/B-ing on the same event if cost or independence ever matters. At about $1.50 for the full backfill it does not yet.
 
 Decided 2026-08-15: CPUC series stays, scraper rebuilt against cpuc.ca.gov directly (2.2). National disclosed-metrics time series built in Phase 2 (2.3), not deferred to Phase 4.
 
