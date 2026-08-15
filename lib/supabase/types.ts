@@ -139,6 +139,66 @@ export type Database = {
         }
         Relationships: []
       }
+      disclosed_metrics: {
+        Row: {
+          as_of: string
+          attribution: string
+          company_id: string
+          created_at: string
+          id: string
+          metric: string
+          notes: string | null
+          scope: string
+          source_id: string | null
+          stated_by: string | null
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          as_of: string
+          attribution?: string
+          company_id: string
+          created_at?: string
+          id?: string
+          metric: string
+          notes?: string | null
+          scope?: string
+          source_id?: string | null
+          stated_by?: string | null
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          as_of?: string
+          attribution?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          metric?: string
+          notes?: string | null
+          scope?: string
+          source_id?: string | null
+          stated_by?: string | null
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disclosed_metrics_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disclosed_metrics_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       financial_periods: {
         Row: {
           capex_usd: number | null

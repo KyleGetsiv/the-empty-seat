@@ -27,20 +27,10 @@ Reference table. Six rows seeded: Waymo plus five competitors. Columns:
 is Waymo-only; competitor rows exist for future comparative data.
 
 #### sources
-Tracks every primary source linked to a data point. Scrapers insert
-rows here; human-entered data can also reference a source.
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| url | text | |
-| publisher | text | |
-| title | text | |
-| published_at | timestamptz | nullable |
-| scraped_at | timestamptz | nullable |
-| content_hash | text | nullable, used for scraper dedupe |
-| storage_key | text | nullable, raw doc in Supabase Storage |
-| created_at | timestamptz | |
+Every primary source linked to a data point; scrapers and admins both
+insert. Columns: `id` (pk), `url`, `publisher`, `title`, `published_at`
+(nullable), `scraped_at` (nullable), `content_hash` (nullable, scraper
+dedupe), `storage_key` (nullable, raw doc in Storage), `created_at`.
 
 #### cities
 One row per city per company. Holds all operational and geographic data
@@ -69,22 +59,11 @@ lazily by scrapers as they come online (empty `{}` by default).
 | updated_at | timestamptz | |
 
 #### milestones
-Dated events in Waymo's history. Drafts (`is_published = false`) are
-admin-only. Public RLS policy filters to published rows only.
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| company_id | uuid | fk companies |
-| event_date | date | |
-| headline | text | |
-| body | text | nullable, markdown |
-| tags | text[] | nullable |
-| source_id | uuid | nullable, fk sources |
-| kyle_annotation | text | nullable |
-| is_published | boolean | default false |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+Dated events in Waymo's history; drafts (`is_published = false`) are
+admin-only via RLS. Columns: `id` (pk), `company_id` (fk), `event_date`,
+`headline`, `body` (nullable markdown), `tags` (text[], nullable),
+`source_id` (nullable fk), `kyle_annotation` (nullable), `is_published`
+(default false), `created_at`, `updated_at`.
 
 #### fleet_snapshots
 Point-in-time vehicle counts per company/city. `city_id` nullable for
@@ -94,45 +73,35 @@ company-wide snapshots. Columns: `id` (pk), `company_id`, `city_id`
 (nullable), `created_at`.
 
 #### ride_estimates
-Weekly ride volume estimates per company/city. `city_id` null means
-company-wide. `confidence` is an enum: 'high', 'medium', 'low'.
-`vehicle_miles_traveled` is populated by CPUC scraper (quarterly VMT ZEV).
-
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| company_id | uuid | fk companies |
-| city_id | uuid | nullable, fk cities |
-| period_start | date | |
-| period_end | date | |
-| rides_per_week | int | normalized to weekly |
-| avg_fare_usd | numeric | nullable |
-| source_id | uuid | nullable, fk sources |
-| confidence | text | check constraint |
-| methodology_note | text | nullable |
-| vehicle_miles_traveled | numeric | nullable, added 0007, VMT ZEV from CPUC |
-| created_at | timestamptz | |
+Ride volume estimates per company/city; `city_id` null = company-wide
+(the CPUC quarterly series). `confidence` check: 'high'/'medium'/'low'.
+Columns: `id` (pk), `company_id` (fk), `city_id` (nullable fk),
+`period_start`, `period_end`, `rides_per_week` (normalized weekly),
+`avg_fare_usd` (nullable), `source_id` (nullable fk), `confidence`,
+`methodology_note`, `vehicle_miles_traveled` (nullable, 0007, CPUC VMT
+ZEV), `created_at`.
 
 #### financial_periods
-Disclosed or modeled financial data by fiscal period. `is_disclosed`
-distinguishes filing-sourced data from estimates.
+Disclosed or modeled financials by fiscal period; `is_disclosed`
+separates filing-sourced from estimated. Columns: `id` (pk), `company_id`
+(fk), `fiscal_period` (e.g. 'Q1 2026'), `period_start`, `period_end`,
+`revenue_usd`, `opex_usd`, `capex_usd`, `operating_loss_usd` (all
+nullable numerics), `is_disclosed`, `source_id` (nullable fk),
+`methodology_note`, `created_at`, `updated_at`.
 
-| column | type | notes |
-|--------|------|-------|
-| id | uuid | pk |
-| company_id | uuid | fk companies |
-| fiscal_period | text | e.g. 'Q1 2026' |
-| period_start | date | |
-| period_end | date | |
-| revenue_usd | numeric | nullable |
-| opex_usd | numeric | nullable |
-| capex_usd | numeric | nullable |
-| operating_loss_usd | numeric | nullable |
-| is_disclosed | boolean | |
-| source_id | uuid | nullable, fk sources |
-| methodology_note | text | nullable |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+#### disclosed_metrics
+Point-in-time public disclosures (module 2.3), one row per
+(company, metric, as_of); unique constraint on that triple makes seeding
+idempotent. Metric slugs: 'weekly_rides', 'cumulative_trips',
+'fleet_size', 'cities_count'. `attribution` check constraint:
+'company' | 'investor' | 'media' | 'analyst'. Columns: `id` (pk),
+`company_id` (fk), `metric`, `value` (numeric), `as_of` (date), `scope`
+(default 'worldwide'; seeded rows use 'US'), `attribution` (default
+'company'), `source_id` (nullable fk, always set in practice),
+`stated_by`, `notes`, `created_at`, `updated_at`. Audit and updated_at
+triggers attached. Seeded with Waymo's verified disclosure arc by
+`scripts/seed-disclosed-metrics.ts` (8 weekly_rides incl. the Tiger
+Global 450K investor figure, 4 cumulative_trips, 3 fleet_size).
 
 #### site_content
 Key/value store for admin-editable editorial copy. Uses `key text` as
@@ -165,19 +134,21 @@ nullable), `after` (jsonb, nullable), `created_at`.
   Not on `site_content` (text PK, not UUID) or `audit_log` itself.
 - **updated_at triggers:** companies, cities, milestones,
   financial_periods, site_content.
-- **Disclosed metrics convention:** most-recent company-wide disclosures
-  live in `site_content` under keys prefixed `latest_*_disclosed`. The
-  `markdown_body` stores YAML-style text: `value`, `as_of` (YYYY-MM-DD),
-  `source_id` (UUID referencing `sources`). `lib/disclosed-metrics.ts`
-  parses and joins. Hero and KeyStats prefer disclosed values over CPUC
-  aggregates and fall back gracefully if absent or malformed.
+- **Disclosed metrics convention (v2, module 2.3):** point-in-time public
+  disclosures live in the `disclosed_metrics` table, one row per
+  (company, metric, as_of). `attribution` separates company-confirmed
+  rows from third-party ones; headline surfaces use company rows only,
+  charts render company rows as filled dots and third-party as open dots.
+  The old `site_content` `latest_*_disclosed` text convention is retired
+  (row deleted by `scripts/seed-disclosed-metrics.ts`).
 - **external_keys convention:** cities.external_keys is a jsonb map from
   source slug to that source's city identifier. Keys: `"robotaxi_tracker"`,
   `"nhtsa"`, etc. Populated lazily; scrapers write their key when first run.
   All 11 Waymo cities ship with empty `{}`.
 - **Migration history:** 0001 initial; 0002 site_content; 0003 drop
   site_content trigger; 0004 cities unique (company_id, name); 0005
-  service_area_geojson; 0006 external_keys + GIN; 0007 VMT field.
+  service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
+  0008 disclosed_metrics.
 
 ---
 
@@ -216,6 +187,7 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/milestones/[id] | edit, delete | update, delete | /milestones, / |
 | /admin/site-content | list + create new key form | insert | /admin/site-content/[key] |
 | /admin/site-content/[key] | edit | upsert | / |
+| /admin/disclosed-metrics | full CRUD, attribution badges | insert, update, delete | / |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
 | /api/cron/scraper-health | daily CPUC freshness report to Slack (quarters in DB, pending, overdue) | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
@@ -249,6 +221,10 @@ revalidates /methodology and /methodology/sources.
 - **Operations:** server component. Fetches Waymo cities and CPUC
   quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
   CoverageMapClient, and methodology footnote.
+- **NationalTrajectory:** server component (2.3), section id="trajectory"
+  between KeyStats and Operations. Fetches the weekly_rides disclosure
+  series and renders DisclosedRidesChart with framing copy and a footnote
+  naming the latest company figure and the 1M target source.
 - **RecentMilestones:** server component. Fetches 5 most recent published
   milestones. Renders MilestoneCard list with "View all" link. Returns
   null if no published milestones. Section id="milestones".
@@ -264,6 +240,15 @@ revalidates /methodology and /methodology/sources.
   markdown support (headings, lists, tables, blockquotes, code). HTML
   comments pass through as real HTML comments (invisible to readers).
   Admin-authored content only; rehype-raw is safe in this context.
+
+### components/charts/
+
+- **DisclosedRidesChart (client):** first chart in this directory (2.3).
+  Recharts ComposedChart over epoch-ms time axis. Company disclosures:
+  monotone line with filled dots; third-party figures: open dots, no
+  line. 1M end-2026 target as dashed ReferenceLine annotation. Legend
+  caption explains the dot convention. Tooltip shows figure, date,
+  stated_by, attribution.
 
 ### components/milestones/
 
@@ -325,12 +310,12 @@ revalidates /methodology and /methodology/sources.
   URL. Missing quarter past deadline+grace posts Slack WARN. Weekly runs
   fetch missing plus two recent quarters; first-week runs re-verify all.
   Fixture tests: `scripts/test-cpuc-parser.ts` (tsx, no framework).
-- **lib/disclosed-metrics.ts:** `getLatestDisclosedWeeklyRides()` reads
-  the `latest_weekly_rides_disclosed` site_content row, parses the
-  YAML-style `markdown_body` (fields: `value`, `as_of`, `source_id`),
-  joins to the `sources` table, and returns structured data. Returns null
-  with a console warning if the row is absent, malformed, or references a
-  missing source. Called by ThesisHero and KeyStats.
+- **lib/disclosed-metrics.ts:** v2 (2.3), reads the `disclosed_metrics`
+  table. `getLatestDisclosedWeeklyRides()` returns the latest COMPANY-
+  attributed weekly_rides row joined to its source (null on none; callers
+  fall back to CPUC). `getDisclosedSeries(metric)` returns the full arc,
+  all attributions, ascending. Called by ThesisHero, KeyStats,
+  NationalTrajectory.
 - **lib/site-content.ts:** `getSiteContent(key)` server helper.
 - **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack webhook.
 - **lib/supabase/server.ts:** session-bound client for RLS reads.
@@ -421,7 +406,8 @@ revalidates /methodology and /methodology/sources.
 - Quantitative series are CA-only until 2.3 (national disclosed metrics)
   lands; pre-2025 CPUC baseline deferred to Phase 4.
 - CPUC incident_metrics not ingested; safety-phase territory.
-- lib/supabase/types.ts manually patched for 0006, 0007; regenerate after migrations.
+- lib/supabase/types.ts manually patched for 0006, 0007, 0008; regenerate
+  with `supabase gen types typescript` in 2.6.
 
 ---
 
@@ -454,7 +440,8 @@ app/
     (protected)/
       layout.tsx               session auth gate
       cities/ companies/ milestones/ sources/ fleet-snapshots/
-      ride-estimates/ financial-periods/   full CRUD (list, new, [id]);
+      ride-estimates/ financial-periods/ disclosed-metrics/
+                                 full CRUD (list, new, [id]);
                                  milestones adds publish toggle
       site-content/            list + [key] edit
   api/
@@ -466,8 +453,10 @@ components/
     ThesisHero.tsx + ThesisHeroCounter.tsx
     Thesis.tsx
     KeyStats.tsx
+    NationalTrajectory.tsx
     Operations.tsx
     RecentMilestones.tsx
+  charts/                      DisclosedRidesChart
   ui/                          Button, Card, Container, Heading, Prose,
                                Tooltip, Metric, Term, MarkdownBody
   operations/                  CityLaunchTimeline, QuarterlyTripsChart,
@@ -483,7 +472,7 @@ lib/
   supabase/                    server.ts, admin.ts, browser.ts, types.ts
 
 supabase/
-  migrations/                  0001 through 0007
+  migrations/                  0001 through 0008
   seed.sql                     6 company rows only
 
 scripts/

@@ -7,6 +7,7 @@ const navItems = [
   { label: "Dashboard", href: "/admin" },
   { label: "Milestones", href: "/admin/milestones" },
   { label: "Cities", href: "/admin/cities" },
+  { label: "Disclosed Metrics", href: "/admin/disclosed-metrics" },
   { label: "Fleet Snapshots", href: "/admin/fleet-snapshots" },
   { label: "Ride Estimates", href: "/admin/ride-estimates" },
   { label: "Financial Periods", href: "/admin/financial-periods" },
