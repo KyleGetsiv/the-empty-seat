@@ -60,6 +60,18 @@ await test("htmlToParagraphs drops ix:header, keeps table rows joined, decodes e
   assert.ok(paras.some((p) => p.includes("July 22, 2026 – Alphabet")));
 });
 
+await test("annotateTableRows prefixes data rows with caption, header, and section", () => {
+  const html = `<p>Segment results (in millions; unaudited)</p><table>
+<tr><td></td><td colspan=2>Quarter Ended March 31,</td></tr><tr><td></td><td>2025</td><td>2026</td></tr>
+<tr><td>Revenues:</td><td></td><td></td></tr><tr><td>Other Bets</td><td>450</td><td>411</td></tr>
+<tr><td>Operating income (loss):</td><td></td><td></td></tr><tr><td>Other Bets</td><td>(1,226)</td><td>(2,100)</td></tr></table>`;
+  const paras = htmlToParagraphs(html);
+  assert.ok(paras.includes("[Segment results (in millions; unaudited) Quarter Ended March 31, 2025 2026 | Revenues:] Other Bets 450 411"), JSON.stringify(paras));
+  assert.ok(paras.includes("[Segment results (in millions; unaudited) Quarter Ended March 31, 2025 2026 | Operating income (loss):] Other Bets (1,226) (2,100)"));
+  // A table with no empty-stub header rows is left alone.
+  assert.ok(htmlToParagraphs(EXHIBIT_HTML).some((p) => p === "Other Bets revenues $382"));
+});
+
 await test("selectRelevantPassages keeps Waymo/Other Bets passages plus one neighbour each side", () => {
   const passages = passagesFromHtml(EXHIBIT_HTML);
   const rel = selectRelevantPassages(passages);

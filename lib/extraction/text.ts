@@ -53,16 +53,73 @@ function decodeEntities(s: string): string {
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
+function rowText(rowHtml: string): string {
+  return decodeEntities(rowHtml.replace(/<(td|th)[^>]*>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Financial tables lose their meaning row by row ("Other Bets 450 411"
+// says nothing about periods or units), so each data row is prefixed with
+// the table's header row: the first row whose text has no digits-only
+// cells, i.e. the one naming the periods. Prefix capped so it stays a
+// label rather than a second passage.
+export function annotateTableRows(html: string): string {
+  return html.replace(/(<p\b[^>]*>[\s\S]*?<\/p>\s*)?(<table\b[\s\S]*?<\/table>)/gi, (whole, captionHtml: string | undefined, table: string) => {
+    const rows = table.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+    if (rows.length < 2) return whole;
+    // A short paragraph right before the table is its caption ("in
+    // millions; unaudited") and travels with the header.
+    const caption = captionHtml ? rowText(captionHtml) : "";
+    const captionPart = caption && caption.length <= 120 ? caption : "";
+    // Header = the leading rows whose first cell is empty (SEC financial
+    // tables put period labels above an empty stub column), e.g. "Quarter
+    // Ended March 31," + "2025 2026" + "(unaudited)". Capped at 4 rows /
+    // 160 chars.
+    const firstCellEmpty = (r: string) => {
+      const cell = r.match(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/i);
+      return !cell || rowText(cell[1]).length === 0;
+    };
+    const headerParts: string[] = [];
+    let headerRows = 0;
+    for (const r of rows) {
+      const t = rowText(r);
+      if (!t) { headerRows++; continue; }
+      if (!firstCellEmpty(r) || headerParts.length >= 4) break;
+      headerParts.push(t);
+      headerRows++;
+    }
+    const header = [captionPart, headerParts.join(" ")].filter(Boolean).join(" ").slice(0, 200).trim();
+    if (!header || headerRows >= rows.length) return whole;
+    // Section rows (text, no digits, e.g. "Operating income (loss):") label
+    // the data rows beneath them and are carried into the prefix.
+    let section = "";
+    const out = rows.map((r, i) => {
+      const t = rowText(r);
+      if (!t) return "";
+      if (i < headerRows) return `<tr>${t}</tr>`;
+      if (!/\d/.test(t)) {
+        section = t.slice(0, 80);
+        return `<tr>[${header}] ${t}</tr>`;
+      }
+      return `<tr>[${header}${section ? " | " + section : ""}] ${t}</tr>`;
+    });
+    return (captionHtml ?? "") + out.join("\n");
+  });
+}
+
 // Splits filing HTML into paragraphs on block-level boundaries. Inline XBRL
 // (10-K/10-Q) wraps numbers in ix: tags, which are inline and survive as
-// text; hidden ix:header blocks are dropped. Table cells are joined with
-// spaces so a row reads as one line.
+// text; hidden ix:header blocks are dropped. Table rows become one line
+// each, prefixed with the table header (see annotateTableRows).
 export function htmlToParagraphs(html: string): string[] {
-  const cleaned = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+  const cleaned = annotateTableRows(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+  )
     .replace(/<\/(p|div|tr|li|h[1-6]|table|section|article|blockquote|pre)>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<(td|th)[^>]*>/gi, " ")
@@ -150,7 +207,7 @@ export function normalizeForMatch(s: string): string {
 // quote was actually found in, or null.
 export function verifyQuote(quote: string, locator: string, chunk: Chunk): string | null {
   const q = normalizeForMatch(quote);
-  if (q.length < 20) return null;
+  if (q.length < 10) return null;
   const cited = chunk.passages.find((p) => p.id === locator);
   if (cited && normalizeForMatch(cited.text).includes(q)) return cited.id;
   for (const p of chunk.passages) {

@@ -84,7 +84,7 @@ export const MentionSchema = z.object({
     .describe("The bracketed passage id the quote comes from, exactly as labelled in the input, e.g. 't42' or 'p118'."),
   quote_text: z
     .string()
-    .min(20)
+    .min(10)
     .describe(
       "A verbatim, contiguous excerpt from the labelled passage: the sentence or sentences that mention Waymo. Copy characters exactly; do not paraphrase, abbreviate, or stitch non-adjacent sentences together."
     ),

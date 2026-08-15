@@ -358,7 +358,8 @@ programs and snapshots /landscape.
   `scripts/test-transcript-parser.ts` (9).
 - **extraction/ (4.4):** `schema.ts` (Zod contract, `EXTRACTION_VERSION`,
   `EXTRACTION_MODEL` env-overridable, est. price constants);
-  `text.ts` (HTML/turns.json to labelled passages `p{i}`/`t{i}`,
+  `text.ts` (HTML/turns.json to labelled passages `p{i}`/`t{i}`, table
+  rows prefixed with caption + header + section via `annotateTableRows`,
   `selectRelevantPassages` keeps Waymo/Other Bets hits plus one
   neighbour, `chunkPassages` ~12K chars, `verifyQuote` normalised
   verbatim check); `extract.ts` (forced tool use `record_mentions`,
@@ -370,7 +371,7 @@ programs and snapshots /landscape.
   per event). Zero relevant passages = 'extracted' with 0 mentions and
   0 model calls. Entry `scripts/run-extraction.ts` (`--dry-run --event`
   shows chunks without a model call); tests `scripts/test-extraction.ts`
-  (9, fake model).
+  (10, fake model).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -429,14 +430,12 @@ programs and snapshots /landscape.
 
 ## Known gaps and debt
 
-**Pre-launch:** see `pre-launch.md` at repo root.
-
-**Resumption audit (2026-08-15, 2.1):** all findings resolved in 2.2-2.6.
+**Pre-launch:** see `pre-launch.md`. Resumption audit (2.1) fully resolved.
 
 **Structural debt:**
-- PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006
-  through 0013) with `supabase gen types typescript --linked`; magic-link
-  prod click-through not re-verified since 1.6.
+- PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
+  0013) with `supabase gen types typescript --linked`; magic-link prod
+  click-through not re-verified since 1.6.
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
   built; `service_area_geojson` unused.
