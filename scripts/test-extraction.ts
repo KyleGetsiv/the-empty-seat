@@ -16,7 +16,7 @@ import {
   normalizeForMatch,
 } from "@/lib/extraction/text";
 import { extractChunk, userPrompt, type ModelCaller } from "@/lib/extraction/extract";
-import { ExtractionOutputSchema, extractionToolInputSchema } from "@/lib/extraction/schema";
+import { ExtractionOutputSchema, extractionToolInputSchema, coerceExtractionOutput } from "@/lib/extraction/schema";
 import { dedupeMentionRows } from "@/lib/extraction/run";
 
 let failures = 0;
@@ -171,10 +171,39 @@ await test("dedupeMentionRows keeps first of identical metric/value/period, and 
   assert.equal(out[0].quote_text, "[A] Other Bets 450 411");
 });
 
-await test("extractChunk: schema violation from the model throws (caller marks event failed)", async () => {
+await test("extractChunk: no mentions array at all throws (caller marks event failed)", async () => {
   const chunk = chunkPassages(passagesFromTurns(TURNS))[0];
   const bad: ModelCaller = async () => ({ toolInput: { mentions: "nope" }, usage: { input_tokens: 1, output_tokens: 1 } });
   await assert.rejects(() => extractChunk(chunk, { fiscal_period: "Q1 2026", event_type: "earnings_call", event_date: "2026-04-29" }, bad), /schema validation/);
+});
+
+await test("coerceExtractionOutput repairs the shapes seen in the first backfill", () => {
+  // stringified mentions array
+  const a = coerceExtractionOutput({ mentions: JSON.stringify([{ locator: "t1", quote_text: "Waymo is now averaging over 250,000 paid rides per week", speaker: null, mention_type: "ride_count", extracted_metric: null, confidence: "high" }]) });
+  assert.equal(a?.mentions.length, 1);
+  // unknown metric slug -> other; unknown mention_type -> other; string value -> number
+  const b = coerceExtractionOutput({ mentions: [{ locator: "t1", quote_text: "It has driven more than 100 million fully autonomous miles.", mention_type: "milestone", extracted_metric: { metric: "autonomous_miles", value: "100,000,000", unit: "miles", period: null, scope: "waymo" }, confidence: "high" }] });
+  const m = b!.mentions[0] as { mention_type: string; extracted_metric: { metric: string; value: number } };
+  assert.equal(m.mention_type, "other");
+  assert.equal(m.extracted_metric.metric, "other");
+  assert.equal(m.extracted_metric.value, 100000000);
+  assert.equal(coerceExtractionOutput("garbage"), null);
+});
+
+await test("extractChunk: one malformed mention is dropped, the rest survive", async () => {
+  const chunk = chunkPassages(selectRelevantPassages(passagesFromTurns(TURNS)))[0];
+  const fake: ModelCaller = async () => ({
+    toolInput: {
+      mentions: [
+        { locator: "t1", quote_text: "Waymo is now averaging over 250,000 paid rides per week across its markets.", speaker: null, mention_type: "ride_count", extracted_metric: null, confidence: "high" },
+        { locator: "t3", quote_text: "Other", speaker: null, mention_type: "operating_loss", extracted_metric: null, confidence: "high" },
+      ],
+    },
+    usage: { input_tokens: 10, output_tokens: 10 },
+  });
+  const r = await extractChunk(chunk, { fiscal_period: "Q1 2026", event_type: "earnings_call", event_date: "2026-04-29" }, fake);
+  assert.equal(r.mentions.length, 1);
+  assert.equal(r.dropped_unverified, 1);
 });
 
 if (failures > 0) {

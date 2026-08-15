@@ -109,6 +109,46 @@ export const ExtractionOutputSchema = z.object({
 });
 export type ExtractionOutput = z.infer<typeof ExtractionOutputSchema>;
 
+// Repairs the shapes the model gets wrong in practice without failing the
+// whole event: a stringified mentions array, an unknown metric slug (mapped
+// to 'other'), an unknown mention_type (mapped to 'other'), a stringified
+// or malformed extracted_metric (set to null). Per-mention validation then
+// runs in extract.ts and drops individual mentions that still fail.
+export function coerceExtractionOutput(raw: unknown): { mentions: unknown[] } | null {
+  let obj = raw;
+  if (typeof obj === "string") {
+    try { obj = JSON.parse(obj); } catch { return null; }
+  }
+  if (!obj || typeof obj !== "object") return null;
+  let mentions = (obj as { mentions?: unknown }).mentions;
+  if (typeof mentions === "string") {
+    try { mentions = JSON.parse(mentions); } catch { return null; }
+  }
+  if (!Array.isArray(mentions)) return null;
+  const out = mentions.map((m) => {
+    if (!m || typeof m !== "object") return m;
+    const mm = { ...(m as Record<string, unknown>) };
+    if (typeof mm.extracted_metric === "string") {
+      try { mm.extracted_metric = JSON.parse(mm.extracted_metric); } catch { mm.extracted_metric = null; }
+    }
+    if (mm.extracted_metric && typeof mm.extracted_metric === "object") {
+      const em = { ...(mm.extracted_metric as Record<string, unknown>) };
+      if (typeof em.metric === "string" && !(METRIC_SLUGS as readonly string[]).includes(em.metric)) em.metric = "other";
+      if (typeof em.value === "string") { const n = Number(String(em.value).replace(/[,$]/g, "")); em.value = Number.isFinite(n) ? n : em.value; }
+      if (em.scope !== "waymo" && em.scope !== "other_bets") em.scope = "waymo";
+      if (em.unit === undefined) em.unit = null;
+      if (em.period === undefined) em.period = null;
+      mm.extracted_metric = em;
+    } else if (mm.extracted_metric === undefined) {
+      mm.extracted_metric = null;
+    }
+    if (typeof mm.mention_type === "string" && !(MENTION_TYPES as readonly string[]).includes(mm.mention_type)) mm.mention_type = "other";
+    if (mm.speaker === undefined) mm.speaker = null;
+    return mm;
+  });
+  return { mentions: out };
+}
+
 // JSON Schema for the tool definition. Zod 4 ships a converter; the model
 // sees the same descriptions the validator enforces.
 export function extractionToolInputSchema(): Record<string, unknown> {

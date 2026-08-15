@@ -9,7 +9,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   EXTRACTION_MODEL,
-  ExtractionOutputSchema,
+  MentionSchema,
+  coerceExtractionOutput,
   extractionToolInputSchema,
   type ExtractedMention,
 } from "./schema";
@@ -83,13 +84,22 @@ export async function extractChunk(
   callModel: ModelCaller
 ): Promise<ChunkResult> {
   const { toolInput, usage } = await callModel(SYSTEM_PROMPT, userPrompt(chunk, context));
-  const parsed = ExtractionOutputSchema.safeParse(toolInput);
-  if (!parsed.success) {
-    throw new Error(`Extraction output failed schema validation: ${parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
+  const coerced = coerceExtractionOutput(toolInput);
+  if (!coerced) {
+    throw new Error(`Extraction output failed schema validation: no mentions array in tool input (${JSON.stringify(toolInput).slice(0, 200)})`);
   }
   const mentions: ChunkResult["mentions"] = [];
   let dropped = 0;
-  for (const m of parsed.data.mentions) {
+  for (const raw of coerced.mentions) {
+    // Per-mention validation: a malformed mention is dropped and counted,
+    // it does not fail the event.
+    const parsed = MentionSchema.safeParse(raw);
+    if (!parsed.success) {
+      dropped++;
+      console.warn(`[extract] dropped invalid mention: ${parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
+      continue;
+    }
+    const m = parsed.data;
     const found = verifyQuote(m.quote_text, m.locator, chunk);
     if (!found) {
       dropped++;
