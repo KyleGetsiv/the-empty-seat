@@ -150,6 +150,46 @@ export const glossary: Record<string, GlossaryEntry> = {
       "Fleet size is a leading indicator of future ride capacity. Waymo has not disclosed precise fleet counts; estimates are derived from permit filings, city-level disclosures, and reported expansion plans. Active vehicle count (vehicles actually completing rides) is a subset of total fleet and is tracked separately where data is available.",
     seeAlso: ["capex_intensity", "unit_economics"],
   },
+  supervision_level: {
+    term: "Supervision Level",
+    shortDefinition:
+      "Whether a robotaxi runs with no one in the driver's seat (driverless), with a safety operator who can intervene, or with a human who is legally the driver.",
+    longDefinition:
+      "The single most important distinction in comparing operators. Driverless service carries no in-vehicle labor and is what regulators permit last. A safety operator (or safety monitor) can take control; the vehicle is autonomous but not yet trusted alone. In some cases, such as Tesla's Bay Area service under a charter-party permit, the person in the seat is the legal driver and the service is not classified as autonomous at all.",
+    seeAlso: ["safety_driver", "disclosure_quality", "tcp_permit"],
+  },
+  disclosure_quality: {
+    term: "Disclosure Quality",
+    shortDefinition:
+      "How a figure reached the public: a regulatory filing, a company statement, an earnings disclosure, press reporting, or an estimate.",
+    longDefinition:
+      "Not all numbers are the same kind of fact. Regulatory filings (CPUC quarterly data) are audited by the threat of penalty; earnings disclosures carry securities-law weight; company blog posts are marketing; press-reported figures may be derived by analysts; estimates are exactly that. The landscape table labels every figure so readers can weigh it. The site does not place a marketing claim next to a regulatory filing without saying so.",
+    seeAlso: ["cpuc", "supervision_level"],
+  },
+  tcp_permit: {
+    term: "TCP Permit",
+    shortDefinition:
+      "A California charter-party carrier permit: the same authorization limousine and chauffeur companies hold. It covers human-driven passenger transport, not autonomous vehicles.",
+    longDefinition:
+      "Tesla operates its Bay Area robotaxi service under a TCP permit obtained in March 2025. The CPUC stated in March 2026 that Tesla is not operating an autonomous vehicle service under this permit and that the person in the car is the driver. As a result Tesla files no per-trip or vehicle-mile data with the state, unlike Waymo, Zoox, and Nuro, which hold AV-specific permits and report quarterly.",
+    seeAlso: ["cpuc", "supervision_level"],
+  },
+  nhtsa_exemption: {
+    term: "NHTSA Exemption",
+    shortDefinition:
+      "Federal permission to sell or operate a vehicle that does not meet standard safety rules written for human-driven cars, such as requirements for a steering wheel or mirrors.",
+    longDefinition:
+      "Purpose-built robotaxis without manual controls cannot comply with several Federal Motor Vehicle Safety Standards. Zoox received a temporary exemption in July 2026 covering eight standards, capped at 2,500 vehicles per year for two years, which cleared the way for paid rides in its bidirectional vehicle. Tesla's Cybercab will need equivalent relief before it can carry the public.",
+    seeAlso: ["supervision_level"],
+  },
+  standing_general_order: {
+    term: "Standing General Order",
+    shortDefinition:
+      "NHTSA's requirement that companies operating automated driving systems report crashes to the federal government within set timeframes.",
+    longDefinition:
+      "Issued in 2021 and amended since, the Standing General Order creates the only national, cross-operator crash dataset for automated vehicles. It covers Waymo, Zoox, Tesla, and others, and is the basis for comparative safety analysis in a later phase of this site. Reporting thresholds and redactions limit what can be concluded from it.",
+    seeAlso: ["disclosure_quality"],
+  },
 };
 
 export type GlossaryKey = keyof typeof glossary;

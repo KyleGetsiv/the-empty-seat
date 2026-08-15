@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 3.2
+Module: 3.3
 Date: 2026-08-15
-Commit: 3.2 work
+Commit: 3.3 work
 
 ---
 
@@ -180,8 +180,10 @@ nullable), `after` (jsonb, nullable), `created_at`.
 | /methodology | MarkdownBody render of methodology_body from site_content; falls back to PLACEHOLDER const if key absent | site_content | ISR 3600s; on-demand when site_content admin saves |
 | /methodology/sources | Auto-generated source list grouped by publisher, sorted published_at DESC | sources | ISR 3600s; on-demand when sources admin mutates |
 
-All other public routes (unit-economics, financials, earnings, landscape,
-safety, outlook) are planned but not yet built.
+| /landscape | intro (site_content landscape_intro), OperatorTable, SupervisionStrip, US OperatorMap, China/export prose (landscape_china) + world map, methodology (landscape_methodology) | operator_programs, roles, competitor_snapshots, cities, site_content | ISR 3600s; on-demand from programs/snapshots admin |
+
+Other public routes (unit-economics, financials, earnings, safety,
+outlook) are planned but not yet built.
 
 ### Admin routes
 
@@ -268,6 +270,24 @@ also revalidates /methodology/sources; site-content revalidates
   or 5s). Replaces browser confirm() dialogs, which cannot work on server
   component forms. Used by every admin delete form (2.6).
 
+### components/landscape/ (3.3)
+
+- **OperatorTable (client):** one row per program, sorted public-serving
+  first then by weekly rides. Cells render "not disclosed" when null;
+  `~` prefix on press-reported/estimated vehicle counts; cities as
+  "public / total"; supervision pill; disclosure-quality badge with
+  as-of month, tooltip carrying notes and source link. Partner roles
+  listed under the operator name.
+- **SupervisionStrip:** three bands (driverless public paid; supervised
+  or not yet public; human is legal driver) from `isDriverlessPublic()`
+  and the `human_is_legal_driver` supervision value. Column hoisted to
+  module scope (react-hooks/static-components).
+- **OperatorMap (client) + OperatorMapClient:** separate lighter map from
+  the Waymo CoverageMap (open decision 4 resolved): markers only, one
+  color per program (`programColor()`), solid/ringed/hollow by status,
+  hover popups, `region` prop 'us' | 'world' (naturalEarth projection
+  for world). Client wrapper renders the legend.
+
 ### components/milestones/
 
 - **MilestoneCard:** shared card component for listing and landing page.
@@ -308,11 +328,6 @@ also revalidates /methodology/sources; site-content revalidates
   index (1-5), label, and hex color. `getBucketLegend(dates)` returns
   sorted distinct buckets for legend rendering. Used by CoverageMap;
   chart use removed in 1.3 (QuarterlyTripsChart uses accent color only).
-- **lib/glossary/index.ts:** central glossary, 18 terms. Keys include:
-  disengagement_rate, contribution_margin, autonomous_miles, remote_assist,
-  safety_driver, service_area, cpuc, weekly_rides, vehicles_in_fleet,
-  cohort, rides_per_vehicle_per_day, waitlist_city, and others.
-  `GlossaryKey` type is auto-derived.
 - **lib/cpuc-calendar.ts:** pure CPUC filing-calendar logic (deadlines
   May 1/Aug 1/Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-
   free by design; imported by scraper, health cron, AND client chart
@@ -332,7 +347,17 @@ also revalidates /methodology/sources; site-content revalidates
   fall back to CPUC). `getDisclosedSeries(metric)` returns the full arc,
   all attributions, ascending. Called by ThesisHero, KeyStats,
   NationalTrajectory.
-- **lib/site-content.ts:** `getSiteContent(key)` server helper.
+- **lib/landscape.ts (server) + lib/landscape-types.ts (client-safe):**
+  split deliberately; the client components import types and label maps
+  from landscape-types, never the server module (which pulls in
+  supabase/server). `getLandscapePrograms()` joins programs, roles,
+  latest snapshot per program, and source; `getLandscapeCities()` and
+  `getWaymoCitiesForMap()` feed the operator map.
+- **lib/glossary/index.ts:** 23 terms after 3.3 (added supervision_level,
+  disclosure_quality, tcp_permit, nhtsa_exemption, standing_general_order).
+- **lib/site-content.ts:** `getSiteContent(key)` server helper. Landscape
+  keys: landscape_intro, landscape_china, landscape_methodology (seeded
+  by `scripts/seed-landscape-content.ts`, page falls back to inline copy).
 - **lib/notify.ts:** `notifySlack(message, level)` POSTs to Slack webhook.
 - **lib/supabase/server.ts:** session-bound client for RLS reads.
 - **lib/supabase/admin.ts:** service-role client, server-only.
@@ -408,8 +433,8 @@ the magic-link prod retest deferred since 1.6.
   revalidation covers it.
 - City detail pages not built; timeline shows disabled links.
 - `service_area_geojson` exists but unused; polygon rendering deferred.
-- Public routes /landscape, /financials, /earnings, /safety, /outlook,
-  /unit-economics are still stubs (landscape lands in 3.3).
+- Public routes /financials, /earnings, /safety, /outlook,
+  /unit-economics are still stubs.
 - Resolved in Phase 2 (kept for history): companies delete-confirm,
   revalidatePath gaps, site_content YAML disclosed-metrics convention.
 - Quantitative series are CA-only until 2.3 (national disclosed metrics)
@@ -431,67 +456,40 @@ the magic-link prod retest deferred since 1.6.
 
 ```
 app/
-  page.tsx                     landing page composition
-  layout.tsx                   root layout, TooltipProvider, fonts
-  globals.css                  @theme tokens, scroll-behavior, cohort colors
-  (public)/
-    layout.tsx                 wraps children in PageShell (nav + footer)
-    milestones/
-      page.tsx                 listing with tag filter chips
-      [id]/page.tsx            detail page, 404 for drafts
-    methodology/
-      page.tsx                 MarkdownBody render of methodology_body
-      sources/page.tsx         auto-generated source list grouped by publisher
-  admin/
-    layout.tsx                 passthrough, no auth check
-    login/                     magic link page
-    (protected)/
-      layout.tsx               session auth gate
-      cities/ companies/ milestones/ sources/ fleet-snapshots/
-      ride-estimates/ financial-periods/ disclosed-metrics/
-      programs/ snapshots/       full CRUD (list, new, [id]);
-                                 milestones adds publish toggle
-      site-content/            list + [key] edit
-  api/
-    cron/scraper-health/       daily health check
+  page.tsx, layout.tsx, globals.css   landing composition, root layout, @theme
+  (public)/                  layout.tsx wraps in PageShell; milestones/
+                             (list, [id]), methodology/ (page, sources/),
+                             landscape/ (3.3)
+  admin/                     layout.tsx passthrough; login/; (protected)/
+                             with auth-gate layout and CRUD dirs: cities,
+                             companies, milestones (+publish toggle),
+                             sources, fleet-snapshots, ride-estimates,
+                             financial-periods, disclosed-metrics, programs,
+                             snapshots, site-content ([key] edit)
+  api/cron/scraper-health/   daily CPUC freshness report
 
 components/
-  sections/
-    PageShell.tsx
-    ThesisHero.tsx + ThesisHeroCounter.tsx
-    Thesis.tsx
-    KeyStats.tsx
-    NationalTrajectory.tsx
-    Operations.tsx
-    RecentMilestones.tsx
-  charts/                      DisclosedRidesChart
-  ui/                          Button, Card, Container, Heading, Prose,
-                               Tooltip, Metric, Term, MarkdownBody
-  operations/                  CityLaunchTimeline, QuarterlyTripsChart,
-                               CoverageMap, CoverageMapClient
-  milestones/                  MilestoneCard
+  sections/                  PageShell, ThesisHero(+Counter), Thesis,
+                             KeyStats, NationalTrajectory, Operations,
+                             RecentMilestones
+  charts/                    DisclosedRidesChart
+  ui/                        Button, Card, Container, Heading, Prose,
+                             Tooltip, Metric, Term, MarkdownBody
+  operations/                CityLaunchTimeline, QuarterlyTripsChart,
+                             CoverageMap(+Client)
+  milestones/                MilestoneCard
+  landscape/                 OperatorTable, SupervisionStrip,
+                             OperatorMap(+Client)
+  admin/                     ConfirmDeleteButton
 
 lib/
-  cohorts.ts, disclosed-metrics.ts, site-content.ts, notify.ts,
-  last-updated.ts
-  glossary/index.ts
-  milestones/tags.ts
-  scrapers/cpuc.ts
-  supabase/                    server.ts, admin.ts, browser.ts, types.ts
+  cohorts, disclosed-metrics, site-content, notify, last-updated,
+  cpuc-calendar, landscape (server), landscape-types (client-safe)
+  glossary/index.ts, milestones/tags.ts, scrapers/cpuc.ts
+  supabase/                  server, admin, browser, types
 
-supabase/
-  migrations/                  0001 through 0010
-  seed.sql                     6 company rows only
-
-scripts/
-  run-scraper-cpuc.ts          CPUC quarterly scraper entry point
-  test-cpuc-parser.ts          fixture tests for scraper parse and calendar
-  seed-*.ts, update-*.ts, fix-*.ts   idempotent seed and fix scripts
-                               (cities, milestones, disclosed metrics,
-                               operator programs, competitor snapshots,
-                               methodology, site_content)
-
-.github/
-  workflows/
-    scrape-cpuc.yml            weekly Monday 13:17 UTC, workflow_dispatch
+supabase/                    migrations/ 0001-0010; seed.sql (6 companies)
+scripts/                     run-scraper-cpuc, test-cpuc-parser, and
+                             idempotent seed-*/update-*/fix-* scripts
+.github/workflows/           scrape-cpuc.yml (weekly Mon 13:17 UTC)
 ```
