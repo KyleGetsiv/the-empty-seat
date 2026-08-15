@@ -1,21 +1,18 @@
 # architecture.md
 
-Living state of the codebase. Refreshed at the end of every module that
-changes any of: schema, routes, components, conventions, integrations,
-or debt. Read this at the start of every planning conversation and
-before any orientation report.
-
-This file is not the plan (see dev-plan.md) and not the working agreement
-(see CLAUDE.md). It answers "what currently exists and what's known about
-it." Hard rule: keep this file under 500 lines; consolidate past that.
+Living state of the codebase, refreshed at the end of every module that
+changes schema, routes, components, conventions, integrations, or debt.
+Read this at the start of every planning conversation. Not the plan
+(dev-plan.md), not the working agreement (CLAUDE.md): it answers "what
+currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ---
 
 ## Last updated
 
-Module: 2.1 (dev plan v2)
+Module: 2.2
 Date: 2026-08-15
-Commit: 2.1 work
+Commit: 2.2 work
 
 ---
 
@@ -220,7 +217,7 @@ to `/admin/login` if absent. All mutations use `supabaseAdmin`
 | /admin/site-content | list + create new key form | insert | /admin/site-content/[key] |
 | /admin/site-content/[key] | edit | upsert | / |
 | /admin/companies, sources, fleet-snapshots, ride-estimates, financial-periods | full CRUD | insert, update, delete | none currently |
-| /api/cron/scraper-health | daily health check cron | none | n/a |
+| /api/cron/scraper-health | daily CPUC freshness report to Slack (quarters in DB, pending, overdue) | none | n/a |
 | /auth/callback | Supabase auth callback | n/a | n/a |
 
 Note: fleet-snapshots/ride-estimates/financial-periods mutations do not
@@ -244,14 +241,11 @@ revalidates /methodology and /methodology/sources.
   in ThesisHeroCounter (client).
 - **Thesis:** fetches `thesis_paragraphs` from `site_content` via
   `getSiteContent`, renders markdown. Returns null if key absent.
-- **KeyStats:** 4-tile band (weekly rides, cities served, cumulative
-  trips 2025 CA, miles driven 2025 CA). Tile 1 prefers disclosed
-  worldwide value from `getLatestDisclosedWeeklyRides()`; falls back to
-  CPUC. Label is "WEEKLY RIDES" when disclosed, "AVG WEEKLY RIDES (CA)"
-  on fallback. Tooltip on tile 1 cites Waymo source and notes worldwide
-  scope when disclosed. Tiles 3/4 always from CPUC. Tile 2 from cities
-  count. All metric tiles use `<Metric>` with source link and as-of
-  annotation. Shows `--` with pending note when no data available.
+- **KeyStats:** 4-tile band. Tile 1 prefers disclosed worldwide rides
+  (`getLatestDisclosedWeeklyRides()`), CPUC fallback with derived label.
+  Tile 2 cities count. Tiles 3/4 CPUC trips and miles scoped (2.2) to the
+  latest complete calendar year, labels derived from data; sub-quarter
+  rows filtered defensively. All tiles use `<Metric>`; `--` when no data.
 - **Operations:** server component. Fetches Waymo cities and CPUC
   quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
   CoverageMapClient, and methodology footnote.
@@ -283,12 +277,11 @@ revalidates /methodology and /methodology/sources.
 - **CityLaunchTimeline (client):** vertical accordion, all 11 cities
   sorted by launch_date. One panel open at a time via local state.
   Framer Motion height animation with `AnimatePresence initial={false}`.
-- **QuarterlyTripsChart (client):** Recharts LineChart, X-axis quarterly
-  labels, Y-axis trips (formatted as M). Four data points (Q1-Q4 2025).
-  QoQ growth rate in custom tooltip. Editorial framing paragraph above
-  chart with Robotaxi Tracker outbound link. Pending state (serif
-  paragraph) when data array is empty. As-of footnote with `<Term
-  term="cpuc">` below chart.
+- **QuarterlyTripsChart (client):** Recharts LineChart of CPUC quarters.
+  QoQ growth (signed) in tooltip. Framing paragraph sums the latest
+  complete year, derived from data (2.2); grow/decline verb matches sign.
+  Footnote derives next quarter's CPUC due date from lib/cpuc-calendar.
+  Pending state when data array is empty.
 - **CoverageMap (client):** Mapbox GL JS, lazy-loaded via
   CoverageMapClient wrapper (ssr: false). GeoJSON polygon circles for
   cities with sq_mi; fixed 8px pins for cities without. Waitlist
@@ -319,9 +312,19 @@ revalidates /methodology and /methodology/sources.
   safety_driver, service_area, cpuc, weekly_rides, vehicles_in_fleet,
   cohort, rides_per_vehicle_per_day, waitlist_city, and others.
   `GlossaryKey` type is auto-derived.
-- **lib/scrapers/cpuc.ts:** `runCpucScrape()` fetches CPUC quarterly data
-  from Robotaxi Tracker's JSON mirror; inserts/updates ride_estimates rows
-  (city_id = NULL, confidence = 'high'). Trips and VMT ZEV only; incident_metrics deferred.
+- **lib/cpuc-calendar.ts:** pure CPUC filing-calendar logic (deadlines
+  May 1/Aug 1/Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-
+  free by design; imported by scraper, health cron, AND client chart
+  components. Heavy scraper imports must never move here.
+- **lib/scrapers/cpuc.ts:** v2 (2.2). `runCpucScrape()` fetches quarterly
+  zips direct from cpuc.ca.gov (`waymo-deployment-YYYYqQ.zip`, stable since
+  2025 Q2), unzips in memory (fflate, sub-2MB CSVs only), parses the
+  Driverless AV_Month rollup by header name, sums the quarter, upserts
+  ride_estimates (restatements update in place). Small CSVs archived to
+  Storage `scraped-raw/cpuc/...`; per-quarter sources rows point at the zip
+  URL. Missing quarter past deadline+grace posts Slack WARN. Weekly runs
+  fetch missing plus two recent quarters; first-week runs re-verify all.
+  Fixture tests: `scripts/test-cpuc-parser.ts` (tsx, no framework).
 - **lib/disclosed-metrics.ts:** `getLatestDisclosedWeeklyRides()` reads
   the `latest_weekly_rides_disclosed` site_content row, parses the
   YAML-style `markdown_body` (fields: `value`, `as_of`, `source_id`),
@@ -342,7 +345,7 @@ revalidates /methodology and /methodology/sources.
 
 | service | status | env vars | notes |
 |---------|--------|---------|-------|
-| Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled; Site URL = prod Vercel URL, Redirect URLs include localhost wildcard for dev magic links; local dev currently needs email host swap, fix via `emailRedirectTo` deferred |
+| Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled; Storage bucket `scraped-raw` (private) holds raw scraped CSVs; Site URL = prod Vercel URL, Redirect URLs include localhost wildcard for dev magic links |
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | not yet wired | ANTHROPIC_API_KEY | reserved for Phase 4 extraction |
@@ -358,23 +361,21 @@ revalidates /methodology and /methodology/sources.
 - **Cohort coloring:** `getCohortBucket(launchDate)`. Used by CoverageMap.
 - **Revalidation:** server actions call `revalidatePath`. DB-level ISR
   triggers deferred.
-- **Smooth scroll:** `scroll-behavior: smooth`; sections use `scroll-mt-20`.
-- **Lazy-loading:** `next/dynamic` with `ssr: false`. See CoverageMapClient.
-- **Admin mutations:** `supabaseAdmin` (service-role); server actions in page files.
+- **Smooth scroll** (`scroll-behavior: smooth`, `scroll-mt-20` sections);
+  **lazy-loading** via `next/dynamic` `ssr: false` (CoverageMapClient);
+  **admin mutations** via `supabaseAdmin` server actions in page files.
 - **Em dashes:** forbidden everywhere. Commit prefix: `feat(N.N)`.
-- **external_keys:** scrapers write city identifiers under their source slug;
-  ships as `{}`, populated lazily.
-- **Confidence levels:** disclosed-source scrapers use `'high'`; community
-  or estimated sources use `'medium'` or `'low'`.
+- **Derived copy:** dates, year labels, and "next filing due" text must be
+  computed from data or lib/cpuc-calendar, never hardcoded (2.2 rule).
+- **external_keys:** scrapers write city ids under their source slug; `{}` default.
+- **Confidence levels:** disclosed sources `'high'`; community/estimated `'medium'`/`'low'`.
 - **Methodology copy:** factual sections seeded by Claude Code; editorial
-  framing and changelog are user-authored. `<!-- TODO -->` HTML comments
-  mark user-authored sections (invisible to readers). Content in
-  `site_content` keyed `methodology_body`.
-- **Public route layout (canonical pattern):** `app/(public)/layout.tsx`
-  wraps every `(public)` route in PageShell. New public pages go inside
-  `(public)` and render content only. Homepage at root is the exception:
-  outside `(public)`, calls PageShell directly. Root cause of the 1.4
-  milestones nav/footer bug: this layout was missing.
+  framing user-authored, marked by invisible `<!-- TODO -->` comments.
+  Content in `site_content` keyed `methodology_body`.
+- **Public route layout (canonical):** `app/(public)/layout.tsx` wraps all
+  `(public)` routes in PageShell; new public pages render content only.
+  Homepage at root is the exception (calls PageShell directly). The 1.4
+  milestones nav/footer bug came from this layout missing.
 - **Admin server action error pattern:** capture `{ error }` from Supabase
   mutations; on error, throw `Failed to <verb> <table> row: ${error.message}`
   before `revalidatePath`/`redirect`. Applied uniformly across all admin actions.
@@ -387,19 +388,16 @@ revalidates /methodology and /methodology/sources.
 
 **Pre-launch:** see `pre-launch.md` at repo root.
 
-**Resumption audit findings (2026-08-15, module 2.1):**
-- CPUC scraper source dead: Robotaxi Tracker removed the JSON mirror (data
-  paths serve homepage HTML). 16 green Actions runs since May ingested
-  nothing (404 = silent skip). DB holds Q1-Q4 2025 only. Rebuild direct
-  against cpuc.ca.gov in 2.2 with overdue-quarter Slack WARN semantics.
-- Stray ride_estimates row (2026-03-21/27, 500000/wk) duplicates the
-  disclosed metric; corrupts chart and KeyStats sums. Delete in 2.2.
-- KeyStats and chart sum ALL quarters but label them "2025"; "filed
-  February 2026" copy hardcoded. Fix in 2.6.
-- Timeline and map popup collapse 'waitlist' into "Announced" (fix 2.6);
-  scraper-health cron still the 0.7 placeholder (wire for real in 2.2).
-- Supabase auto-pause resumed and repo made public 2026-08-15. tsc and
-  eslint pass clean on a fresh install.
+**Resumption audit (2026-08-15, module 2.1), status after 2.2:**
+- FIXED in 2.2: dead mirror (direct cpuc.ca.gov scraper), silent-skip
+  semantics, placeholder health cron, all-quarters-summed-as-"2025" bug,
+  hardcoded filing-date copy (now derived from the filing calendar).
+- PENDING RUN: `scripts/fix-remove-stray-ride-row.ts` (stray 500000/wk
+  row); needs local run with service key. KeyStats filters sub-quarter
+  rows defensively either way.
+- Remaining for 2.6: waitlist badge collapse in timeline/map popup,
+  companies delete-confirm bug, missing revalidatePath calls.
+- Supabase auto-pause resumed and repo made public 2026-08-15.
 
 **Structural debt:**
 - **Magic-link verification pending:** admin click-through against prod was deferred from 1.6 due to Supabase email rate limit; provisional based on Site URL fix.
@@ -490,8 +488,10 @@ supabase/
 
 scripts/
   run-scraper-cpuc.ts          CPUC quarterly scraper entry point
+  test-cpuc-parser.ts          fixture tests for scraper parse and calendar
   seed-*.ts, update-*.ts, fix-*.ts   one-time seed and content-fix scripts
-                               (cities, milestones, methodology, site_content)
+                               (cities, milestones, methodology, site_content,
+                               stray ride row)
 
 .github/
   workflows/

@@ -9,8 +9,11 @@ const CPUC_SOURCE_URL =
 type CpucStats = {
   latestRidesPerWeek: number | null;
   latestPeriodLabel: string | null;
-  cumulativeTrips: number;
-  cumulativeMiles: number;
+  // Sums are scoped to the most recent calendar year with all four CPUC
+  // quarters present; statsYear names that year for labels and tooltips.
+  statsYear: number | null;
+  yearTrips: number;
+  yearMiles: number;
   hasData: boolean;
 };
 
@@ -51,17 +54,30 @@ async function getCpucStats(waymoId: string): Promise<CpucStats> {
     .is("city_id", null)
     .order("period_end", { ascending: false });
 
-  if (!data || data.length === 0) {
+  // Defensive: only quarter-length rows (roughly 90-day periods) belong to
+  // the CPUC series. Shorter rows (e.g. a mis-entered disclosure week) must
+  // not pollute the sums or the latest-quarter readout.
+  const quarterRows = (data ?? []).filter((row) => {
+    const r = row as { period_start: string; period_end: string };
+    const span =
+      (new Date(r.period_end + "T00:00:00Z").getTime() -
+        new Date(r.period_start + "T00:00:00Z").getTime()) /
+      86_400_000;
+    return span >= 80;
+  });
+
+  if (quarterRows.length === 0) {
     return {
       latestRidesPerWeek: null,
       latestPeriodLabel: null,
-      cumulativeTrips: 0,
-      cumulativeMiles: 0,
+      statsYear: null,
+      yearTrips: 0,
+      yearMiles: 0,
       hasData: false,
     };
   }
 
-  const latest = data[0] as {
+  const latest = quarterRows[0] as {
     rides_per_week: number;
     vehicle_miles_traveled: number | null;
     period_end: string;
@@ -70,22 +86,33 @@ async function getCpucStats(waymoId: string): Promise<CpucStats> {
 
   const latestPeriodLabel = periodToQuarterLabel(latest.period_start);
 
-  let cumulativeTrips = 0;
-  let cumulativeMiles = 0;
-  for (const row of data as typeof data) {
+  // Group by calendar year; use the most recent year with 4 quarters.
+  const byYear = new Map<number, { count: number; trips: number; miles: number }>();
+  for (const row of quarterRows) {
     const r = row as {
       rides_per_week: number;
       vehicle_miles_traveled: number | null;
+      period_start: string;
     };
-    cumulativeTrips += (r.rides_per_week ?? 0) * 13;
-    cumulativeMiles += Number(r.vehicle_miles_traveled ?? 0);
+    const year = new Date(r.period_start + "T00:00:00Z").getUTCFullYear();
+    const agg = byYear.get(year) ?? { count: 0, trips: 0, miles: 0 };
+    agg.count++;
+    agg.trips += (r.rides_per_week ?? 0) * 13;
+    agg.miles += Number(r.vehicle_miles_traveled ?? 0);
+    byYear.set(year, agg);
   }
+  const complete = [...byYear.entries()]
+    .filter(([, v]) => v.count === 4)
+    .sort((a, b) => b[0] - a[0]);
+  const statsYear = complete.length > 0 ? complete[0][0] : null;
+  const yearAgg = statsYear !== null ? complete[0][1] : null;
 
   return {
     latestRidesPerWeek: latest.rides_per_week,
     latestPeriodLabel,
-    cumulativeTrips,
-    cumulativeMiles,
+    statsYear,
+    yearTrips: yearAgg?.trips ?? 0,
+    yearMiles: yearAgg?.miles ?? 0,
     hasData: true,
   };
 }
@@ -137,8 +164,7 @@ export async function KeyStats() {
                 explanation={
                   <>
                     Weekly average over the most recent quarter, derived from CPUC quarterly
-                    filings. California operations only. Latest data: {cpuc.latestPeriodLabel}{" "}
-                    (filed February 2026).
+                    filings. California operations only. Latest data: {cpuc.latestPeriodLabel}.
                   </>
                 }
                 sourceUrl={CPUC_SOURCE_URL}
@@ -173,19 +199,19 @@ export async function KeyStats() {
             </p>
           </div>
 
-          {/* Tile 3: Cumulative trips 2025 (CA) */}
+          {/* Tile 3: Cumulative trips, latest complete year (CA) */}
           <div className="flex flex-col gap-2">
-            {cpuc.hasData && cpuc.cumulativeTrips > 0 ? (
+            {cpuc.hasData && cpuc.statsYear !== null && cpuc.yearTrips > 0 ? (
               <Metric
-                value={fmtMillions(cpuc.cumulativeTrips)}
+                value={fmtMillions(cpuc.yearTrips)}
                 explanation={
                   <>
-                    Total fulfilled trips in California during 2025, derived from CPUC quarterly
-                    filings (four quarters summed). California operations only.
+                    Total fulfilled trips in California during {cpuc.statsYear}, derived from
+                    CPUC quarterly filings (four quarters summed). California operations only.
                   </>
                 }
                 sourceUrl={CPUC_SOURCE_URL}
-                asOf="Full year 2025"
+                asOf={`Full year ${cpuc.statsYear}`}
                 className="text-[3.25rem] leading-none tabular-nums"
               />
             ) : (
@@ -194,24 +220,24 @@ export async function KeyStats() {
               </span>
             )}
             <p className="text-sm font-medium text-foreground tracking-wide uppercase">
-              Trips in 2025 (CA)
+              Trips in {cpuc.statsYear ?? "--"} (CA)
             </p>
           </div>
 
-          {/* Tile 4: Vehicle miles 2025 (CA) */}
+          {/* Tile 4: Vehicle miles, latest complete year (CA) */}
           <div className="flex flex-col gap-2">
-            {cpuc.hasData && cpuc.cumulativeMiles > 0 ? (
+            {cpuc.hasData && cpuc.statsYear !== null && cpuc.yearMiles > 0 ? (
               <Metric
-                value={fmtMillions(cpuc.cumulativeMiles)}
+                value={fmtMillions(cpuc.yearMiles)}
                 explanation={
                   <>
-                    Vehicle miles traveled in California during 2025, sourced from CPUC quarterly
-                    filings (four quarters summed). Zero-emission vehicles only (Waymo&apos;s full
-                    fleet). California operations only.
+                    Vehicle miles traveled in California during {cpuc.statsYear}, sourced from
+                    CPUC quarterly filings (four quarters summed). Zero-emission vehicles only
+                    (Waymo&apos;s full fleet). California operations only.
                   </>
                 }
                 sourceUrl={CPUC_SOURCE_URL}
-                asOf="Full year 2025"
+                asOf={`Full year ${cpuc.statsYear}`}
                 className="text-[3.25rem] leading-none tabular-nums"
               />
             ) : (
@@ -220,7 +246,7 @@ export async function KeyStats() {
               </span>
             )}
             <p className="text-sm font-medium text-foreground tracking-wide uppercase">
-              Miles driven 2025 (CA)
+              Miles driven {cpuc.statsYear ?? "--"} (CA)
             </p>
           </div>
 

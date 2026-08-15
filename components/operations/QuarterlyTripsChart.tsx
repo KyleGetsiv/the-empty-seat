@@ -11,12 +11,44 @@ import {
   Dot,
 } from "recharts";
 import { Term } from "@/components/ui/Term";
+import {
+  parseQuarterLabel,
+  nextQuarter,
+  quarterLabel,
+  filingDeadlineLabel,
+} from "@/lib/cpuc-calendar";
 
 export type ChartDataPoint = {
   label: string;
   trips: number;
   qoqGrowth: number | null;
 };
+
+// Sums trips for the most recent calendar year with all four quarters
+// present. Returns null when no complete year exists in the data.
+function latestCompleteYear(
+  data: ChartDataPoint[]
+): { year: number; trips: number } | null {
+  const byYear = new Map<number, { count: number; trips: number }>();
+  for (const d of data) {
+    const qt = parseQuarterLabel(d.label);
+    if (!qt) continue;
+    const agg = byYear.get(qt.year) ?? { count: 0, trips: 0 };
+    agg.count++;
+    agg.trips += d.trips;
+    byYear.set(qt.year, agg);
+  }
+  const complete = [...byYear.entries()]
+    .filter(([, v]) => v.count === 4)
+    .sort((a, b) => b[0] - a[0]);
+  return complete.length > 0
+    ? { year: complete[0][0], trips: complete[0][1].trips }
+    : null;
+}
+
+function fmtGrowth(g: number): string {
+  return `${g >= 0 ? "+" : ""}${g.toFixed(1)}%`;
+}
 
 function formatTrips(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -46,7 +78,7 @@ function CustomTooltip({
       <p className="text-foreground">{formatTrips(point.trips)} trips</p>
       {point.qoqGrowth !== null && (
         <p className="text-muted mt-1">
-          +{point.qoqGrowth.toFixed(1)}% vs prior quarter
+          {fmtGrowth(point.qoqGrowth)} vs prior quarter
         </p>
       )}
     </div>
@@ -66,22 +98,35 @@ export function QuarterlyTripsChart({ data }: { data: ChartDataPoint[] }) {
     );
   }
 
-  const fullYearTrips = data.reduce((sum, d) => sum + d.trips, 0);
   const latest = data[data.length - 1];
+  const completeYear = latestCompleteYear(data);
+  const growthClause =
+    latest.qoqGrowth !== null ? (
+      <>
+        {latest.qoqGrowth >= 0 ? "growing" : "declining"}{" "}
+        <strong className="font-medium">
+          {Math.abs(latest.qoqGrowth).toFixed(1)}%
+        </strong>{" "}
+        quarter over quarter in {latest.label}.{" "}
+      </>
+    ) : null;
 
   return (
     <section aria-label="Quarterly trips chart" className="py-16 sm:py-20">
       {/* TODO: user to replace with final copy */}
       <p className="text-base text-foreground max-w-2xl mb-10 leading-relaxed">
-        Waymo completed{" "}
-        <strong className="font-medium">{formatTrips(fullYearTrips)}</strong> trips in
-        California in 2025, growing{" "}
-        {latest.qoqGrowth !== null && (
+        {completeYear ? (
           <>
-            <strong className="font-medium">{latest.qoqGrowth.toFixed(0)}%</strong> quarter
-            over quarter in {latest.label}.{" "}
+            Waymo completed{" "}
+            <strong className="font-medium">{formatTrips(completeYear.trips)}</strong>{" "}
+            trips in California in {completeYear.year},{" "}
+          </>
+        ) : (
+          <>
+            Waymo&apos;s California trip volume is charted below by quarter,{" "}
           </>
         )}
+        {growthClause}
         California is Waymo&apos;s largest and most closely regulated market, and the only state
         where quarterly trip data is publicly disclosed. See the{" "}
         <a
@@ -124,9 +169,20 @@ export function QuarterlyTripsChart({ data }: { data: ChartDataPoint[] }) {
       </div>
 
       <p className="mt-4 text-xs text-muted">
-        Data through {latest.label} (filed February 2026).{" "}
-        <Term term="cpuc">CPUC</Term> files quarterly; 2026 figures expected May 2026 onward.
-        California only.
+        Data through {latest.label}.{" "}
+        <Term term="cpuc">CPUC</Term> files quarterly
+        {(() => {
+          const qt = parseQuarterLabel(latest.label);
+          if (!qt) return null;
+          const nq = nextQuarter(qt);
+          return (
+            <>
+              ; {quarterLabel(nq)} figures are due to CPUC by{" "}
+              {filingDeadlineLabel(nq)}
+            </>
+          );
+        })()}
+        . California only.
       </p>
     </section>
   );
