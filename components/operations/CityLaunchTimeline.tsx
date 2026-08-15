@@ -29,17 +29,28 @@ function formatFullDate(dateStr: string) {
   return format(parseISO(dateStr), "MMMM d, yyyy");
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  public: "Public",
+  waitlist: "Waitlist",
+  employee: "Employee-only",
+  announced: "Announced",
+  paused: "Paused",
+};
+
 function StatusBadge({ status }: { status: string }) {
   const isPublic = status === "public";
+  const isOperating = status === "public" || status === "waitlist" || status === "employee";
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
         isPublic
           ? "bg-accent/10 text-accent"
-          : "bg-border text-muted"
+          : isOperating
+            ? "bg-surface border border-border text-foreground"
+            : "bg-border text-muted"
       }`}
     >
-      {isPublic ? "Public" : "Announced"}
+      {STATUS_LABELS[status] ?? status}
     </span>
   );
 }

@@ -187,9 +187,9 @@ export async function KeyStats() {
               value={citiesServed}
               explanation={
                 <>
-                  Count of Waymo cities with status &ldquo;public&rdquo; or &ldquo;waitlist.&rdquo;
-                  Includes markets where Waymo has announced service and signup is open, even if
-                  full public access is pending. See the city launch timeline below for detail.
+                  Count of Waymo cities serving public riders (status &ldquo;public&rdquo; or
+                  &ldquo;waitlist&rdquo;). Excludes markets in employee-only driverless operation
+                  and announced markets. See the city launch timeline below for detail.
                 </>
               }
               className="text-[3.25rem] leading-none tabular-nums"

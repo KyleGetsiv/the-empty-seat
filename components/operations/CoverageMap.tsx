@@ -252,7 +252,14 @@ export function CoverageMap({ cities }: Props) {
 
         const areaLabel =
           p.service_area_sq_mi != null ? `${p.service_area_sq_mi} sq mi` : "Not yet disclosed";
-        const statusLabel = p.status === "public" ? "Public" : "Announced";
+        const statusLabels: Record<string, string> = {
+          public: "Public",
+          waitlist: "Waitlist",
+          employee: "Employee-only",
+          announced: "Announced",
+          paused: "Paused",
+        };
+        const statusLabel = statusLabels[p.status] ?? p.status;
 
         popup
           .setLngLat(lngLat)

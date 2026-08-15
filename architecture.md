@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 2.2
+Module: 2.4
 Date: 2026-08-15
-Commit: 2.2 work
+Commit: 2.4 work
 
 ---
 
@@ -34,10 +34,14 @@ dedupe), `storage_key` (nullable, raw doc in Storage), `created_at`.
 
 #### cities
 One row per city per company. Holds all operational and geographic data
-for a market. `status` is an enum: 'announced', 'waitlist', 'public',
-'paused'. `service_area_geojson` is reserved; the map currently derives
-circles from `service_area_sq_mi` only. `external_keys` is populated
-lazily by scrapers as they come online (empty `{}` by default).
+for a market. `status` check (0009): 'announced', 'waitlist', 'employee',
+'public', 'paused'. 'employee' = fully driverless operations with
+employee-only riders ahead of public access. As of 2.4 the Waymo roster
+is 18 rows: 8 public, 2 waitlist, 4 employee, 3 announced (no launch
+date, so hidden from timeline/map), plus Bay Area naming note.
+`service_area_geojson` is reserved; the map derives circles from
+`service_area_sq_mi` only. `external_keys` is populated lazily by
+scrapers (empty `{}` by default).
 
 | column | type | notes |
 |--------|------|-------|
@@ -148,7 +152,7 @@ nullable), `after` (jsonb, nullable), `created_at`.
 - **Migration history:** 0001 initial; 0002 site_content; 0003 drop
   site_content trigger; 0004 cities unique (company_id, name); 0005
   service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
-  0008 disclosed_metrics.
+  0008 disclosed_metrics; 0009 cities 'employee' status.
 
 ---
 
@@ -259,9 +263,10 @@ revalidates /methodology and /methodology/sources.
 
 ### components/operations/
 
-- **CityLaunchTimeline (client):** vertical accordion, all 11 cities
-  sorted by launch_date. One panel open at a time via local state.
-  Framer Motion height animation with `AnimatePresence initial={false}`.
+- **CityLaunchTimeline (client):** vertical accordion of all cities with
+  a launch_date, sorted ascending. Full status badge map (2.4): Public
+  accented; Waitlist/Employee-only outlined; Announced/Paused muted. One
+  panel open at a time; Framer Motion height animation.
 - **QuarterlyTripsChart (client):** Recharts LineChart of CPUC quarters.
   QoQ growth (signed) in tooltip. Framing paragraph sums the latest
   complete year, derived from data (2.2); grow/decline verb matches sign.
@@ -380,8 +385,9 @@ revalidates /methodology and /methodology/sources.
 - PENDING RUN: `scripts/fix-remove-stray-ride-row.ts` (stray 500000/wk
   row); needs local run with service key. KeyStats filters sub-quarter
   rows defensively either way.
-- Remaining for 2.6: waitlist badge collapse in timeline/map popup,
-  companies delete-confirm bug, missing revalidatePath calls.
+- Waitlist/employee badge collapse in timeline and map popup: FIXED in
+  2.4 (full status label maps). Remaining for 2.6: companies
+  delete-confirm bug, missing revalidatePath calls, types regeneration.
 - Supabase auto-pause resumed and repo made public 2026-08-15.
 
 **Structural debt:**
@@ -472,7 +478,7 @@ lib/
   supabase/                    server.ts, admin.ts, browser.ts, types.ts
 
 supabase/
-  migrations/                  0001 through 0008
+  migrations/                  0001 through 0009
   seed.sql                     6 company rows only
 
 scripts/

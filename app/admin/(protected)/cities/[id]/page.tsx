@@ -80,6 +80,7 @@ export default async function EditCityPage({ params }: { params: Promise<{ id: s
           <label className="block text-sm font-medium text-gray-700 mb-1">Status *</label>
           <select name="status" required defaultValue={city.status} className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none">
             <option value="announced">Announced</option>
+            <option value="employee">Employee-only</option>
             <option value="waitlist">Waitlist</option>
             <option value="public">Public</option>
             <option value="paused">Paused</option>
