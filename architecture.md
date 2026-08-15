@@ -366,12 +366,12 @@ programs and snapshots /landscape.
   Zod validation, unverifiable quotes dropped, speaker taken from the
   passage not the model; `ModelCaller` injectable); `run.ts`
   (`runExtraction({limit, eventId, includeFailed, reprocessBelowVersion})`
-  loads Storage doc, writes pending waymo_mentions, replaces only
-  pending rows on re-run, records tokens/chunks/dropped, Slack cost line
+  loads Storage doc, dedupes identical metric/value/period mentions,
+  writes pending waymo_mentions, replaces only pending rows on re-run, records tokens/chunks/dropped, Slack cost line
   per event). Zero relevant passages = 'extracted' with 0 mentions and
   0 model calls. Entry `scripts/run-extraction.ts` (`--dry-run --event`
   shows chunks without a model call); tests `scripts/test-extraction.ts`
-  (10, fake model).
+  (11, fake model).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`

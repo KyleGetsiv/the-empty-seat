@@ -17,6 +17,7 @@ import {
 } from "@/lib/extraction/text";
 import { extractChunk, userPrompt, type ModelCaller } from "@/lib/extraction/extract";
 import { ExtractionOutputSchema, extractionToolInputSchema } from "@/lib/extraction/schema";
+import { dedupeMentionRows } from "@/lib/extraction/run";
 
 let failures = 0;
 function test(name: string, fn: () => void | Promise<void>) {
@@ -154,6 +155,20 @@ await test("extractChunk: keeps verified mentions, drops paraphrase, speaker com
   assert.equal(r.mentions[0].speaker, "Sundar Pichai");
   assert.equal(r.mentions[0].verified_locator, "t1");
   assert.equal(r.usage.input_tokens, 1200);
+});
+
+await test("dedupeMentionRows keeps first of identical metric/value/period, and of identical quote without metric", () => {
+  const base = { earnings_event_id: "e", confidence: "high", review_status: "pending" as const };
+  const rows = [
+    { ...base, mention_type: "revenue_reference", quote_text: "[A] Other Bets 450 411", extracted_metric: { metric: "revenue_usd", value: 411000000, period: "Q1 2026", scope: "other_bets" } },
+    { ...base, mention_type: "revenue_reference", quote_text: "[B | Revenues:] Other Bets 450 411", extracted_metric: { metric: "revenue_usd", value: 411000000, period: "Q1 2026", scope: "other_bets" } },
+    { ...base, mention_type: "operating_loss", quote_text: "[B] Other Bets (1,226) (2,100)", extracted_metric: { metric: "operating_loss_usd", value: 2100000000, period: "Q1 2026", scope: "other_bets" } },
+    { ...base, mention_type: "strategic_commentary", quote_text: "Waymo is on a great trajectory.", extracted_metric: null },
+    { ...base, mention_type: "strategic_commentary", quote_text: "Waymo is on a great  trajectory.", extracted_metric: null },
+  ];
+  const out = dedupeMentionRows(rows);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].quote_text, "[A] Other Bets 450 411");
 });
 
 await test("extractChunk: schema violation from the model throws (caller marks event failed)", async () => {

@@ -43,6 +43,7 @@ export interface EventResult {
   chunks: number;
   mentions: number;
   dropped: number;
+  deduped: number;
   usage: Usage;
   error?: string;
 }
@@ -50,6 +51,23 @@ export interface EventResult {
 export interface RunResult {
   processed: EventResult[];
   remaining_pending: number;
+}
+
+type MentionInsert = Database["public"]["Tables"]["waymo_mentions"]["Insert"];
+
+export function dedupeMentionRows(rows: MentionInsert[]): MentionInsert[] {
+  const seen = new Set<string>();
+  const out: MentionInsert[] = [];
+  for (const r of rows) {
+    const em = r.extracted_metric as { metric?: string; value?: number; period?: string | null; scope?: string } | null;
+    const key = em && em.metric && em.value !== undefined
+      ? `m|${em.metric}|${em.value}|${em.period ?? ""}|${em.scope ?? ""}`
+      : `q|${r.mention_type}|${String(r.quote_text).replace(/\s+/g, " ").trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
 }
 
 export function estimateCostUsd(u: Usage): number {
@@ -84,6 +102,7 @@ export async function processEvent(
     chunks: 0,
     mentions: 0,
     dropped: 0,
+    deduped: 0,
     usage: { input_tokens: 0, output_tokens: 0 },
   };
 
@@ -116,6 +135,15 @@ export async function processEvent(
         });
       }
     }
+
+    // Filings repeat their segment tables (results section, then the
+    // reconciliation), so the same figure arrives twice. Keep the first
+    // occurrence of an identical metric/value/period, or of an identical
+    // quote when there is no metric.
+    const deduped = dedupeMentionRows(rows);
+    base.deduped = rows.length - deduped.length;
+    rows.length = 0;
+    rows.push(...deduped);
 
     // Re-runs replace only unreviewed output; approved and rejected mentions
     // are human decisions and stay.
@@ -213,7 +241,7 @@ export async function runExtraction(opts: RunOptions = {}): Promise<RunResult> {
       const cost = estimateCostUsd(r.usage);
       console.log(
         `[extract] ${r.label}: ${r.status}; ${r.passages_relevant}/${r.passages_total} passages, ${r.chunks} chunks, ` +
-          `${r.mentions} mentions (${r.dropped} dropped unverified), ${r.usage.input_tokens} in / ${r.usage.output_tokens} out (~$${cost.toFixed(3)} est.)` +
+          `${r.mentions} mentions (${r.dropped} dropped unverified, ${r.deduped} duplicate), ${r.usage.input_tokens} in / ${r.usage.output_tokens} out (~$${cost.toFixed(3)} est.)` +
           (r.error ? ` ERROR ${r.error}` : "")
       );
     }
