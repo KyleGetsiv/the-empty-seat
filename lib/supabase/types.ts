@@ -301,10 +301,14 @@ export type Database = {
           error: string | null
           event_date: string
           event_type: string
+          extraction_chunks: number | null
+          extraction_input_tokens: number | null
           extraction_model: string | null
+          extraction_output_tokens: number | null
           extraction_version: number | null
           fiscal_period: string
           id: string
+          mentions_dropped: number | null
           processed_at: string | null
           processing_status: string
           source_id: string | null
@@ -319,10 +323,14 @@ export type Database = {
           error?: string | null
           event_date: string
           event_type: string
+          extraction_chunks?: number | null
+          extraction_input_tokens?: number | null
           extraction_model?: string | null
+          extraction_output_tokens?: number | null
           extraction_version?: number | null
           fiscal_period: string
           id?: string
+          mentions_dropped?: number | null
           processed_at?: string | null
           processing_status?: string
           source_id?: string | null
@@ -337,10 +345,14 @@ export type Database = {
           error?: string | null
           event_date?: string
           event_type?: string
+          extraction_chunks?: number | null
+          extraction_input_tokens?: number | null
           extraction_model?: string | null
+          extraction_output_tokens?: number | null
           extraction_version?: number | null
           fiscal_period?: string
           id?: string
+          mentions_dropped?: number | null
           processed_at?: string | null
           processing_status?: string
           source_id?: string | null

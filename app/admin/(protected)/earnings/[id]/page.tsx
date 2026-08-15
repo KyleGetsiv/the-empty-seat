@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 import type { Database } from "@/lib/supabase/types";
+import { PRICE_USD_PER_MTOK_IN, PRICE_USD_PER_MTOK_OUT } from "@/lib/extraction/schema";
 
 const MENTION_TYPES = [
   "revenue_reference", "city_count", "ride_count", "fleet_size", "capex", "operating_loss",
@@ -136,6 +137,14 @@ export default async function ReviewEventPage({ params }: { params: Promise<{ id
         ) : null}
         {event.error ? <span className="text-red-600"> | {event.error}</span> : null}
       </p>
+      {event.processing_status !== "pending" && event.extraction_chunks !== null && (
+        <p className="text-xs text-gray-400 -mt-4 mb-6">
+          Extraction read {event.extraction_chunks} chunk(s), {(event.extraction_input_tokens ?? 0).toLocaleString()} in / {(event.extraction_output_tokens ?? 0).toLocaleString()} out tokens
+          {" "}(~${(((event.extraction_input_tokens ?? 0) * PRICE_USD_PER_MTOK_IN + (event.extraction_output_tokens ?? 0) * PRICE_USD_PER_MTOK_OUT) / 1_000_000).toFixed(2)} est.)
+          {event.mentions_dropped ? `; ${event.mentions_dropped} model quote(s) dropped for failing verbatim verification` : ""}
+          {event.extraction_chunks === 0 ? "; document contains no Waymo or Other Bets passages" : ""}
+        </p>
+      )}
 
       {pending.length > 1 && (
         <form action={bulkApprove} className="mb-6">

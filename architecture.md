@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 4.3
+Module: 4.4
 Date: 2026-08-15
-Commit: 4.3 work
+Commit: 4.4 work
 
 ---
 
@@ -117,7 +117,8 @@ of metric promotion from the earnings review queue (4.1).
 `source_id`, `storage_key`, `accession_number` (unique; SEC dedupe),
 `processing_status` ('pending','extracted','reviewed','failed'),
 `extraction_version`, `extraction_model`, `processed_at`, `error`,
-timestamps. `waymo_mentions`: one per quote; `mention_type` check (11
+`extraction_input_tokens`, `extraction_output_tokens`,
+`extraction_chunks`, `mentions_dropped` (0013), timestamps. `waymo_mentions`: one per quote; `mention_type` check (11
 values), `quote_text`, `speaker`, `extracted_metric` jsonb,
 `confidence`, `kyle_annotation`, `review_status` ('pending','approved',
 'rejected'), `page_or_timestamp`, `disclosed_metric_id` (set when
@@ -161,10 +162,10 @@ nullable), `after` (jsonb, nullable), `created_at`.
   source slug to that source's city id; populated lazily by scrapers.
 - **Migration history:** 0001 initial; 0002 site_content; 0003 drop
   site_content trigger; 0004 cities unique (company_id, name); 0005
-  service_area_geojson; 0006 external_keys + GIN; 0007 VMT field;
-  0008 disclosed_metrics; 0009 cities 'employee' status; 0010
-  operator programs, roles, competitor_snapshots, companies fields; 0011
-  ride_estimates program_id + tier; 0012 earnings_events, waymo_mentions.
+  service_area_geojson; 0006 external_keys + GIN; 0007 VMT; 0008
+  disclosed_metrics; 0009 cities 'employee'; 0010 operator programs,
+  roles, competitor_snapshots; 0011 ride_estimates program_id + tier;
+  0012 earnings_events, waymo_mentions; 0013 extraction usage columns.
 
 ---
 
@@ -319,8 +320,7 @@ programs and snapshots /landscape.
   supervision_level, disclosure_quality, tcp_permit, nhtsa_exemption,
   standing_general_order).
 - **cpuc-calendar.ts:** pure filing-calendar logic (deadlines May 1/Aug 1/
-  Nov 1/Feb 1, overdue-with-grace, label parsing). Dependency-free;
-  shared by scraper, health cron, and client charts.
+  Nov 1/Feb 1, overdue-with-grace, label parsing); dependency-free.
 - **scrapers/cpuc.ts:** `runCpucScrape()`. Deployment tier (2.2):
   `waymo-deployment-YYYYqQ.zip` from cpuc.ca.gov, fflate-unzip sub-2MB
   CSVs, parse Driverless AV_Month by header, sum quarter, upsert Waymo
@@ -354,6 +354,21 @@ programs and snapshots /landscape.
   creates sources (publisher 'The Motley Fool') and 'pending' events.
   Entry `scripts/run-scraper-transcripts.ts [--from-year]`; tests
   `scripts/test-transcript-parser.ts` (6).
+- **extraction/ (4.4):** `schema.ts` (Zod contract, `EXTRACTION_VERSION`,
+  `EXTRACTION_MODEL` env-overridable, est. price constants);
+  `text.ts` (HTML/turns.json to labelled passages `p{i}`/`t{i}`,
+  `selectRelevantPassages` keeps Waymo/Other Bets hits plus one
+  neighbour, `chunkPassages` ~12K chars, `verifyQuote` normalised
+  verbatim check); `extract.ts` (forced tool use `record_mentions`,
+  Zod validation, unverifiable quotes dropped, speaker taken from the
+  passage not the model; `ModelCaller` injectable); `run.ts`
+  (`runExtraction({limit, eventId, includeFailed, reprocessBelowVersion})`
+  loads Storage doc, writes pending waymo_mentions, replaces only
+  pending rows on re-run, records tokens/chunks/dropped, Slack cost line
+  per event). Zero relevant passages = 'extracted' with 0 mentions and
+  0 model calls. Entry `scripts/run-extraction.ts` (`--dry-run --event`
+  shows chunks without a model call); tests `scripts/test-extraction.ts`
+  (9, fake model).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -365,7 +380,7 @@ programs and snapshots /landscape.
   deployment-vs-pilot series (3.4).
 - **supabase/:** server.ts (session client), admin.ts (service role,
   server-only), browser.ts (anon), types.ts (generated, hand-patched for
-  0006 through 0011; regenerate with `supabase gen types typescript`).
+  0006 through 0013; regenerate with `supabase gen types typescript`).
 
 ### External integrations
 
@@ -374,9 +389,9 @@ programs and snapshots /landscape.
 | Supabase | live | NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY | linked project, RLS enabled; Storage bucket `scraped-raw` (private) holds raw scraped CSVs; Site URL = prod Vercel URL, Redirect URLs include localhost wildcard for dev magic links |
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
-| Anthropic API | model decided, not yet wired | ANTHROPIC_API_KEY | `claude-sonnet-5` for extraction (4.4) |
+| Anthropic API | live (4.4) | ANTHROPIC_API_KEY, EXTRACTION_MODEL (optional), EXTRACTION_PRICE_IN/OUT (optional) | `@anthropic-ai/sdk`, tool-use extraction, default `claude-sonnet-5` |
 | Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
-| GitHub Actions | live | NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL | scrape-cpuc.yml weekly Mon 13:17 UTC; scrape-edgar.yml daily 14:07 UTC (workflow_dispatch accepts `since`); scrape-transcripts.yml weekly Wed 15:11 UTC (workflow_dispatch accepts `from-year`) |
+| GitHub Actions | live | Supabase URL + service key, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL, ANTHROPIC_API_KEY | scrape-cpuc weekly Mon 13:17 UTC; scrape-edgar daily 14:07 (`since`); scrape-transcripts weekly Wed 15:11 (`from-year`); extract-earnings hourly :23 (`limit`, `include-failed`); all UTC, dispatch inputs in parens |
 | SEC EDGAR | live (4.2) | SCRAPER_USER_AGENT | data.sec.gov submissions API + Archives; fair-use headers; Alphabet CIK 0001652044 |
 
 ---
@@ -384,7 +399,7 @@ programs and snapshots /landscape.
 ## Conventions adopted
 
 - **Pending-state pattern:** section + Container always rendered; pending
-  branch is a serif paragraph (`text-[2.25rem] sm:text-[3rem]`), no Card.
+  branch is a serif paragraph, no Card.
 - **Cohort coloring** via `getCohortBucket(launchDate)` (CoverageMap).
 - **Revalidation:** server actions call `revalidatePath`; DB-level ISR
   triggers deferred. **Smooth scroll** + `scroll-mt-20`; **lazy-loading**
@@ -415,23 +430,19 @@ programs and snapshots /landscape.
 
 **Pre-launch:** see `pre-launch.md` at repo root.
 
-**Resumption audit (2026-08-15, 2.1):** all findings resolved in 2.2-2.6
-(dead mirror, silent-skip semantics, placeholder health cron, year-
-scoping bug, hardcoded filing dates, stray 500K row, badge collapse,
-delete-confirm, revalidatePath gaps).
+**Resumption audit (2026-08-15, 2.1):** all findings resolved in 2.2-2.6.
 
 **Structural debt:**
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006
-  through 0012) with `supabase gen types typescript --linked`; magic-link
+  through 0013) with `supabase gen types typescript --linked`; magic-link
   prod click-through not re-verified since 1.6.
 - `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded
   (site_content, operator_program_roles). See CLAUDE.md.
-- `is_published` DB-level ISR trigger not wired; admin revalidation covers.
-- City detail pages not built; `service_area_geojson` unused.
-- Planned routes not yet built (unlinked from nav until they are):
-  /financials, /earnings, /safety, /outlook, /unit-economics.
-- Pre-2025 CPUC baseline and CPUC incident_metrics not ingested (later
-  phases).
+- `is_published` DB-level ISR trigger not wired; city detail pages not
+  built; `service_area_geojson` unused.
+- Planned routes not yet built: /financials, /earnings, /safety,
+  /outlook, /unit-economics. Pre-2025 CPUC baseline and CPUC
+  incident_metrics not ingested (later phases).
 
 ---
 
@@ -476,10 +487,13 @@ lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe)
   glossary/index.ts, milestones/tags.ts, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}.ts
+  extraction/{schema,text,extract,run}.ts
   supabase/                  server, admin, browser, types
 
-supabase/                    migrations/ 0001-0012; seed.sql (6 companies)
-scripts/                     run-scraper-{cpuc,edgar,transcripts}, test-*-parser,
+supabase/                    migrations/ 0001-0013; seed.sql (6 companies)
+scripts/                     run-scraper-{cpuc,edgar,transcripts}, run-extraction,
+                             test-*-parser, test-extraction,
                              and idempotent seed-*/update-*/fix-* scripts
-.github/workflows/           scrape-{cpuc,transcripts}.yml (weekly), scrape-edgar.yml (daily)
+.github/workflows/           scrape-{cpuc,transcripts}.yml (weekly), scrape-edgar.yml
+                             (daily), extract-earnings.yml (hourly)
 ```

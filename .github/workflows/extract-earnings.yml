@@ -1,0 +1,44 @@
+name: Extract earnings mentions
+
+on:
+  schedule:
+    # Hourly at :23. Picks up events the EDGAR (daily) and transcript
+    # (weekly) scrapers created and runs the model over them, at most 3 per
+    # run. Nothing to do on most hours: the run exits after one cheap query.
+    # GitHub Actions rather than Vercel Cron because Hobby crons are daily-only
+    # and a 10-K can need a dozen model calls, past the function duration limit.
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Max events this run (default 3; use 20 for a backfill)'
+        required: false
+        default: ''
+      include-failed:
+        description: 'Also retry failed events (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run extraction
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
+          if [ "${{ github.event.inputs.include-failed }}" = "true" ]; then ARGS="$ARGS --include-failed"; fi
+          npx tsx scripts/run-extraction.ts $ARGS
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EXTRACTION_MODEL: ${{ vars.EXTRACTION_MODEL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
