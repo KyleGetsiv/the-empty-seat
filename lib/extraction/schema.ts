@@ -11,6 +11,7 @@
 // stale ones.
 
 import { z } from "zod";
+import { MENTION_TYPES } from "@/lib/earnings-mentions";
 
 export const EXTRACTION_VERSION = 1;
 
@@ -24,20 +25,12 @@ export const EXTRACTION_MODEL = process.env.EXTRACTION_MODEL || "claude-sonnet-5
 export const PRICE_USD_PER_MTOK_IN = Number(process.env.EXTRACTION_PRICE_IN || 3);
 export const PRICE_USD_PER_MTOK_OUT = Number(process.env.EXTRACTION_PRICE_OUT || 15);
 
-export const MENTION_TYPES = [
-  "revenue_reference",
-  "city_count",
-  "ride_count",
-  "fleet_size",
-  "capex",
-  "operating_loss",
-  "strategic_commentary",
-  "forward_guidance",
-  "competitive_reference",
-  "safety_reference",
-  "other",
-] as const;
-export type MentionType = (typeof MENTION_TYPES)[number];
+// The mention vocabulary lives in lib/earnings-mentions.ts (client-safe, so
+// the review queue's client components can read it without pulling zod into
+// the browser bundle). Re-exported here because the extraction pipeline has
+// always imported it from this module.
+export { MENTION_TYPES };
+export type { MentionType } from "@/lib/earnings-mentions";
 
 // Metric slugs the model may attach to a mention. The first four are the
 // disclosed_metrics slugs (the review queue promotes ride_count -> weekly_rides

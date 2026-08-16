@@ -18,6 +18,7 @@ import {
 import { extractChunk, userPrompt, type ModelCaller } from "@/lib/extraction/extract";
 import { ExtractionOutputSchema, extractionToolInputSchema, coerceExtractionOutput } from "@/lib/extraction/schema";
 import { dedupeMentionRows } from "@/lib/extraction/run";
+import { dropLogKey } from "@/lib/extraction/drop-log";
 
 let failures = 0;
 function test(name: string, fn: () => void | Promise<void>) {
@@ -151,10 +152,16 @@ await test("extractChunk: keeps verified mentions, drops paraphrase, speaker com
   });
   const r = await extractChunk(chunk, { fiscal_period: "Q1 2026", event_type: "earnings_call", event_date: "2026-04-29" }, fake);
   assert.equal(r.mentions.length, 2);
-  assert.equal(r.dropped_unverified, 1);
+  assert.equal(r.dropped.length, 1);
   assert.equal(r.mentions[0].speaker, "Sundar Pichai");
   assert.equal(r.mentions[0].verified_locator, "t1");
   assert.equal(r.usage.input_tokens, 1200);
+  // 4.5: the drop is described, not just counted, so the review queue can show
+  // what the model claimed and why it was refused.
+  assert.equal(r.dropped[0].reason, "unverified");
+  assert.equal(r.dropped[0].locator, "t2");
+  assert.equal(r.dropped[0].chunk, 1);
+  assert.ok(r.dropped[0].quote_text.includes("Miami and DC"));
 });
 
 await test("dedupeMentionRows keeps first of identical metric/value/period, and of identical quote without metric", () => {
@@ -203,7 +210,17 @@ await test("extractChunk: one malformed mention is dropped, the rest survive", a
   });
   const r = await extractChunk(chunk, { fiscal_period: "Q1 2026", event_type: "earnings_call", event_date: "2026-04-29" }, fake);
   assert.equal(r.mentions.length, 1);
-  assert.equal(r.dropped_unverified, 1);
+  assert.equal(r.dropped.length, 1);
+  // A schema failure and an unverifiable quote are different problems and the
+  // drop log has to tell them apart.
+  assert.equal(r.dropped[0].reason, "invalid_schema");
+  assert.equal(r.dropped[0].quote_text, "Other");
+  assert.ok(r.dropped[0].detail?.includes("quote_text"));
+});
+
+await test("drop log key is stable per event and extraction version", () => {
+  assert.equal(dropLogKey("abc-123", 1), "extraction-logs/abc-123/v1.json");
+  assert.equal(dropLogKey("abc-123", 2), "extraction-logs/abc-123/v2.json");
 });
 
 if (failures > 0) {

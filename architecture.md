@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 4.4
+Module: 4.5
 Date: 2026-08-15
-Commit: 4.4 work
+Commit: 4.5 work
 
 ---
 
@@ -118,12 +118,13 @@ of metric promotion from the earnings review queue (4.1).
 `processing_status` ('pending','extracted','reviewed','failed'),
 `extraction_version`, `extraction_model`, `processed_at`, `error`,
 `extraction_input_tokens`, `extraction_output_tokens`,
-`extraction_chunks`, `mentions_dropped` (0013), timestamps. `waymo_mentions`: one per quote; `mention_type` check (11
-values), `quote_text`, `speaker`, `extracted_metric` jsonb,
-`confidence`, `kyle_annotation`, `review_status` ('pending','approved',
-'rejected'), `page_or_timestamp`, `disclosed_metric_id` (set when
-approval promotes a metric to disclosed_metrics), timestamps. RLS: anon
-sees events and APPROVED mentions only (milestones pattern). Audit and
+`extraction_chunks`, `mentions_dropped` (0013), timestamps.
+`waymo_mentions`: one per quote; `mention_type` check (11 values),
+`quote_text`, `speaker`, `extracted_metric` jsonb, `confidence`,
+`kyle_annotation`, `review_status` ('pending','approved','rejected'),
+`page_or_timestamp` (the extraction passage id, resolvable in the source
+viewer), `disclosed_metric_id` (set when approval promotes a metric),
+timestamps. RLS: anon sees events and APPROVED mentions only. Audit and
 updated_at triggers on both. The v1 extracted_metrics table is dropped;
 disclosed_metrics is the metrics store.
 
@@ -189,10 +190,10 @@ Not yet built: /unit-economics, /financials, /earnings, /safety, /outlook.
 
 Outer `app/admin/layout.tsx` is a passthrough (keeps `/admin/login`
 public); the auth gate is `app/admin/(protected)/layout.tsx` (session
-check, redirect to login). All mutations use `supabaseAdmin`. Every
-mutation revalidates "/" at minimum (2.6); milestones also /milestones;
-sources /methodology/sources; site-content /methodology(/sources);
-programs and snapshots /landscape.
+check, redirect to login). All mutations use `supabaseAdmin` and
+revalidate "/" at minimum (2.6); milestones also /milestones; sources
+/methodology/sources; site-content /methodology(/sources); programs and
+snapshots /landscape.
 
 | path | purpose |
 |------|---------|
@@ -200,7 +201,9 @@ programs and snapshots /landscape.
 | /admin | dashboard with row counts |
 | /admin/{cities, companies, sources, fleet-snapshots, ride-estimates, financial-periods, disclosed-metrics, snapshots} | full CRUD (list, new, [id]); disclosed-metrics and snapshots show attribution/quality badges |
 | /admin/milestones | CRUD plus publish toggle |
-| /admin/earnings, /admin/earnings/[id] | events list with per-event pending/approved/rejected counts; review queue: approve/reject/save per mention, bulk approve, metric promotion to disclosed_metrics on approve (ride_count, city_count, fleet_size); event flips to 'reviewed' when no pending remain |
+| /admin/earnings | events list with per-event pending/approved/rejected/dropped counts; filters (processing status, type, review state, period) via searchParams; "Review next unreviewed" jump |
+| /admin/earnings/[id] | review queue: approve/reject/save per mention, mention status filter, needs-a-number guard, bulk approve (skips metric mentions with no number), metric promotion to disclosed_metrics on approve, drop log, reprocess, next-unreviewed link; event flips to 'reviewed' when no pending remain |
+| /admin/earnings/[id]/source | the stored document rendered as extraction passages, cited passage highlighted; toggle between the passages extraction read and the full document |
 | /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
 | /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
 | /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
@@ -218,21 +221,20 @@ programs and snapshots /landscape.
 - **ThesisHero:** hero with animated ride count (ThesisHeroCounter,
   client, Framer Motion). Prefers `getLatestDisclosedWeeklyRides()` over
   CPUC; caption reflects which. Serif pending state when both null.
-- **Thesis:** renders `thesis_paragraphs` from `site_content`; null if
-  absent.
+- **Thesis:** renders `thesis_paragraphs` from `site_content`, else null.
 - **KeyStats:** 4-tile band. Tile 1 prefers disclosed worldwide rides
-  (`getLatestDisclosedWeeklyRides()`), CPUC fallback with derived label.
-  Tile 2 cities count. Tiles 3/4 CPUC trips and miles scoped (2.2) to the
-  latest complete calendar year, labels derived from data; sub-quarter
-  rows filtered defensively. All tiles use `<Metric>`; `--` when no data.
+  (`getLatestDisclosedWeeklyRides()`), CPUC fallback with derived label;
+  tile 2 cities count; tiles 3/4 CPUC trips and miles scoped (2.2) to the
+  latest complete calendar year, labels from data, sub-quarter rows
+  filtered. All tiles use `<Metric>`; `--` when no data.
 - **Operations:** server component. Fetches Waymo cities and CPUC
-  quarterly chart data. Composes CityLaunchTimeline, QuarterlyTripsChart,
-  CoverageMapClient, and methodology footnote.
-- **NationalTrajectory:** server component (2.3), section id="trajectory"
-  between KeyStats and Operations. Fetches the weekly_rides disclosure
-  series and renders DisclosedRidesChart with framing copy and a footnote
-  naming the latest company figure and the 1M target source.
-- **RecentMilestones:** 5 most recent published milestones as
+  quarterly data; composes CityLaunchTimeline, QuarterlyTripsChart,
+  CoverageMapClient, methodology footnote.
+- **NationalTrajectory:** server component (2.3), id="trajectory" between
+  KeyStats and Operations. Renders DisclosedRidesChart over the
+  weekly_rides series with framing copy and a footnote naming the latest
+  company figure and the 1M target source.
+- **RecentMilestones:** five most recent published milestones as
   MilestoneCards with "View all" link; null if none. id="milestones".
 
 ### components/ui/
@@ -247,12 +249,11 @@ programs and snapshots /landscape.
 
 ### components/charts/
 
-- **DisclosedRidesChart (client):** first chart in this directory (2.3).
-  Recharts ComposedChart over epoch-ms time axis. Company disclosures:
-  monotone line with filled dots; third-party figures: open dots, no
-  line. Every dot is an SVG link to its source row's URL (2.6, opens in
-  new tab; tooltip says so). 1M end-2026 target as dashed ReferenceLine.
-  Legend caption explains the dot convention.
+- **DisclosedRidesChart (client, 2.3):** Recharts ComposedChart over an
+  epoch-ms axis. Company disclosures: monotone line, filled dots;
+  third-party figures: open dots, no line. Every dot is an SVG link to its
+  source URL (2.6, new tab). 1M end-2026 target as a dashed ReferenceLine;
+  legend caption explains the dot convention.
 
 ### components/admin/
 
@@ -260,6 +261,11 @@ programs and snapshots /landscape.
   server-action forms (first click arms, second submits; disarms on blur
   or 5s). Replaces browser confirm() dialogs, which cannot work on server
   component forms. Used by every admin delete form (2.6).
+- **MentionCard (client, 4.5):** one reviewable mention. Client only so
+  the needs-a-number guard can track the type select and value input live:
+  a metric-type mention with no number cannot be approved until a value is
+  entered or the opt-out is ticked. The server action arrives as a prop, so
+  the card is still a form post.
 
 ### components/landscape/ (3.3)
 
@@ -269,38 +275,34 @@ programs and snapshots /landscape.
   "public / total"; supervision pill; disclosure-quality badge with
   as-of month, tooltip carrying notes and source link. Partner roles
   listed under the operator name.
-- **SupervisionStrip:** three bands (driverless public paid; supervised
-  or not yet public; human is legal driver) from `isDriverlessPublic()`
-  and the `human_is_legal_driver` supervision value. Column hoisted to
-  module scope (react-hooks/static-components).
+- **SupervisionStrip:** three bands (driverless public paid; supervised or
+  not yet public; human is legal driver) from `isDriverlessPublic()` and
+  the `human_is_legal_driver` supervision value.
 - **CpucComparisonChart (client):** Waymo deployment-tier vs pilot-tier
-  quarterly CA trips on a log scale (solid vs dashed lines); regulatory
-  data only. Fed by `getCpucComparison()`. Page shows a serif pending
-  state until pilot rows exist.
-- **OperatorMap (client) + OperatorMapClient:** separate lighter map from
-  the Waymo CoverageMap (open decision 4 resolved): markers only, one
-  color per program (`programColor()`), solid/ringed/hollow by status,
-  hover popups, `region` prop 'us' | 'world' (naturalEarth projection
-  for world). Client wrapper renders the legend.
+  quarterly CA trips on a log scale (solid vs dashed); regulatory data
+  only, from `getCpucComparison()`. Serif pending state until pilot rows
+  exist.
+- **OperatorMap (client) + OperatorMapClient:** lighter map than the Waymo
+  CoverageMap: markers only, one color per program (`programColor()`),
+  solid/ringed/hollow by status, hover popups, `region` prop 'us' |
+  'world' (naturalEarth for world). Client wrapper renders the legend.
 
 ### components/milestones/
 
-- **MilestoneCard:** shared card component for listing and landing page.
-  Shows date, tag chips (using `tagLabel`), headline, body preview
-  (line-clamp-3), and annotation. `linked` prop wraps in Next.js Link;
-  false for non-linked uses.
+- **MilestoneCard:** shared by the listing and landing page. Date, tag
+  chips (`tagLabel`), headline, body preview (line-clamp-3), annotation.
+  `linked` prop wraps in a Next.js Link.
 
 ### components/operations/
 
-- **CityLaunchTimeline (client):** vertical accordion of all cities with
-  a launch_date, sorted ascending. Full status badge map (2.4): Public
-  accented; Waitlist/Employee-only outlined; Announced/Paused muted. One
-  panel open at a time; Framer Motion height animation.
-- **QuarterlyTripsChart (client):** Recharts LineChart of CPUC quarters.
-  QoQ growth (signed) in tooltip. Framing paragraph sums the latest
-  complete year, derived from data (2.2); grow/decline verb matches sign.
-  Footnote derives next quarter's CPUC due date from lib/cpuc-calendar.
-  Pending state when data array is empty.
+- **CityLaunchTimeline (client):** vertical accordion of cities with a
+  launch_date, ascending. Status badges (2.4): Public accented,
+  Waitlist/Employee outlined, Announced/Paused muted. One panel open at a
+  time, Framer Motion height animation.
+- **QuarterlyTripsChart (client):** Recharts LineChart of CPUC quarters,
+  signed QoQ growth in the tooltip. Framing paragraph sums the latest
+  complete year from data (2.2), verb matching the sign; footnote derives
+  the next CPUC due date from lib/cpuc-calendar. Pending state when empty.
 - **CoverageMap (client):** Mapbox via CoverageMapClient (dynamic, ssr
   false). Circle polygons for cities with sq_mi, pins otherwise; non-
   public dashed; hover popups; editorial palette overrides.
@@ -316,72 +318,51 @@ programs and snapshots /landscape.
   slugs) + `tagLabel()`, single source of tag vocabulary. **cohorts.ts:**
   `getCohortBucket()` / `getBucketLegend()` for CoverageMap coloring.
   **notify.ts:** `notifySlack(message, level)`. **site-content.ts:**
-  `getSiteContent(key)`. **glossary/index.ts:** 23 terms (3.3 added
-  supervision_level, disclosure_quality, tcp_permit, nhtsa_exemption,
-  standing_general_order).
+  `getSiteContent(key)`. **glossary/index.ts:** 23 terms.
 - **cpuc-calendar.ts:** pure filing-calendar logic (deadlines May 1/Aug 1/
   Nov 1/Feb 1, overdue-with-grace, label parsing); dependency-free.
-- **scrapers/cpuc.ts:** `runCpucScrape()`. Deployment tier (2.2):
-  `waymo-deployment-YYYYqQ.zip` from cpuc.ca.gov, fflate-unzip sub-2MB
-  CSVs, parse Driverless AV_Month by header, sum quarter, upsert Waymo
-  ride_estimates (restatements in place), archive small CSVs to Storage
-  `scraped-raw/cpuc/...`. Overdue quarter past grace = Slack WARN. Pilot
-  tier (3.4): `av-pilot-YYYYqQ.zip`, `PILOT_CARRIERS` (Zoox, Nuro) month-
-  level data per program, tier 'pilot'; absent carriers reported, not
-  errored. Zoox files xlsx: **scrapers/cpuc-xlsx.ts** is a dependency-
-  free "Month-Level" sheet reader; `extractPilotMonthCsv` handles CSV or
-  xlsx. Aurora/Tensor/WeRide filings are non-template, out of scope.
-  Tests `scripts/test-cpuc-parser.ts` (21).
-- **scrapers/sec-edgar.ts (4.2):** `runEdgarScrape({since?})` polls
-  `data.sec.gov/submissions/CIK{cik}.json` for `EDGAR_FILERS` (Alphabet
-  -> Waymo); selects 10-K, 10-Q, and 8-K item 2.02 (earnings releases
-  only); dedupes by accession_number; downloads primary doc plus the
-  EX-99.1 exhibit for 8-Ks (`pickPressReleaseExhibit`) to Storage
-  `scraped-raw/edgar/{cik}/{acc}/`; creates sources (publisher 'SEC
-  EDGAR') and earnings_events ('pending'). 8-K fiscal period = quarter
-  before release date. SCRAPER_USER_AGENT with email required; 2s
-  delays. Entry `scripts/run-scraper-edgar.ts [--since]`; tests
-  `scripts/test-edgar-parser.ts` (6, real submissions fixture).
+  Scraper and extraction internals (why each parser looks the way it does)
+  live in the dev-plan "(Built ...)" notes; these bullets say what exists.
+- **scrapers/cpuc.ts:** `runCpucScrape()` over cpuc.ca.gov quarterly zips.
+  Deployment tier (2.2) upserts Waymo ride_estimates, restatements in
+  place, Slack WARN past grace; pilot tier (3.4) writes per-program rows
+  for `PILOT_CARRIERS` (Zoox, Nuro), absent carriers reported not errored.
+  **cpuc-xlsx.ts** reads Zoox's xlsx. Non-template filers out of scope.
+- **scrapers/sec-edgar.ts (4.2):** `runEdgarScrape({since?})` over the
+  submissions API for `EDGAR_FILERS`; 10-K, 10-Q, 8-K item 2.02 only;
+  dedupes on accession_number; primary doc plus EX-99.1 to Storage;
+  creates sources and 'pending' events. Needs SCRAPER_USER_AGENT.
 - **scrapers/transcripts.ts (4.3):** `runTranscriptScrape({fromYear?})`
-  fetches Motley Fool transcripts (robots-permitted, verified 2026-08)
-  for `TRANSCRIPT_TARGETS` (Alphabet -> Waymo, tickers googl and goog).
-  Discovery via Fool's monthly sitemaps (`sitemapMonths`, two per
-  quarter; `findTranscriptUrls`), 1-2 requests per quarter; existing
-  (filer, fiscal_period) 'earnings_call' events skipped; 429 or Fool's
-  blocked page aborts the run. `extractTranscriptParagraphs` handles the
-  current layout (H2 "Full Conference Call Transcript", "Name:" prefixes)
-  and the classic pre-2025 layout (H2 "Prepared Remarks", speaker header
-  paragraphs, ends at "Call participants"); `groupSpeakerTurns` produce
-  page.html + turns.json at `scraped-raw/transcripts/{slug}/{yyyy}-q{q}/`;
-  creates sources (publisher 'The Motley Fool') and 'pending' events.
-  Entry `scripts/run-scraper-transcripts.ts [--from-year]`; tests
-  `scripts/test-transcript-parser.ts` (9).
-- **extraction/ (4.4):** `schema.ts` (Zod contract, `EXTRACTION_VERSION`,
-  `EXTRACTION_MODEL` env-overridable, est. price constants);
-  `text.ts` (HTML/turns.json to labelled passages `p{i}`/`t{i}`, table
-  rows prefixed with caption + header + section via `annotateTableRows`,
-  `selectRelevantPassages` keeps Waymo/Other Bets hits plus one
-  neighbour, `chunkPassages` ~12K chars, `verifyQuote` normalised
-  verbatim check); `extract.ts` (forced tool use `record_mentions`,
-  `coerceExtractionOutput` shape repair, per-mention Zod validation,
-  invalid or unverifiable mentions dropped and counted, speaker taken
-  from the passage not the model; `ModelCaller` injectable); `run.ts`
-  (`runExtraction({limit, eventId, includeFailed, reprocessBelowVersion})`
-  loads Storage doc, dedupes identical metric/value/period mentions,
-  writes pending waymo_mentions, replaces only pending rows on re-run, records tokens/chunks/dropped, Slack cost line
-  per event). Zero relevant passages = 'extracted' with 0 mentions and
-  0 model calls. Entry `scripts/run-extraction.ts` (`--dry-run --event`
-  shows chunks without a model call); tests `scripts/test-extraction.ts`
-  (13, fake model).
+  discovers Motley Fool transcripts via their monthly sitemaps, parses
+  current and pre-2025 layouts to speaker turns, writes page.html plus
+  turns.json and 'pending' events; a 429 or blocked page aborts the run.
+- **extraction/ (4.4, 4.5):** `schema.ts` (zod contract, version, model,
+  prices); `text.ts` (document to labelled passages `p{i}`/`t{i}`, table
+  rows prefixed with caption and header, relevance filter plus one
+  neighbour, ~12K chunks, `verifyQuote`); `extract.ts` (forced tool use,
+  shape repair, per-mention validation, speaker from the passage not the
+  model, injectable `ModelCaller`, drops described not counted);
+  `drop-log.ts` (4.5, convention below); `run.ts` (`runExtraction({limit,
+  eventId, includeFailed, reprocessBelowVersion})` dedupes identical
+  metric/value/period mentions, replaces only pending rows on re-run,
+  records usage, writes the drop log, Slack cost line). Zero relevant
+  passages = 'extracted', 0 mentions, 0 model calls. Entry
+  `scripts/run-extraction.ts`; tests 21/6/9/14 across the four suites.
+- **earnings-mentions.ts (4.5, client-safe):** `MENTION_TYPES`,
+  `METRIC_PROMOTION` (ride_count -> weekly_rides, city_count ->
+  cities_count, fleet_size -> fleet_size), `REVIEW_STATUSES`,
+  `EVENT_TYPES`, `PROCESSING_STATUSES`: one vocabulary for the review
+  queue's client components and the zod enums in extraction/schema.
+  **earnings-review.ts (4.5, server):** `getMentionCountsByEvent()` and
+  `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
   = full arc, all attributions (NationalTrajectory).
-- **landscape.ts (server) + landscape-types.ts (client-safe):** client
-  components import only from landscape-types. `getLandscapePrograms()`
-  joins programs, roles, latest snapshot, source; `getLandscapeCities()`
-  and `getWaymoCitiesForMap()` feed the map; `getCpucComparison()` builds
-  deployment-vs-pilot series (3.4).
+- **landscape.ts (server) + landscape-types.ts (client-safe):**
+  `getLandscapePrograms()` joins programs, roles, latest snapshot, source;
+  `getLandscapeCities()` and `getWaymoCitiesForMap()` feed the map;
+  `getCpucComparison()` builds deployment-vs-pilot series (3.4).
 - **supabase/:** server.ts (session client), admin.ts (service role,
   server-only), browser.ts (anon), types.ts (generated, hand-patched for
   0006 through 0013; regenerate with `supabase gen types typescript`).
@@ -395,7 +376,8 @@ programs and snapshots /landscape.
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | live (4.4) | ANTHROPIC_API_KEY, EXTRACTION_MODEL (optional), EXTRACTION_PRICE_IN/OUT (optional) | `@anthropic-ai/sdk`, tool-use extraction, default `claude-sonnet-5` |
 | Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
-| GitHub Actions | live | Supabase URL + service key, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL, ANTHROPIC_API_KEY | scrape-cpuc weekly Mon 13:17 UTC; scrape-edgar daily 14:07 (`since`); scrape-transcripts weekly Wed 15:11 (`from-year`); extract-earnings hourly :23 (`limit`, `include-failed`); all UTC, dispatch inputs in parens |
+| GitHub Actions | live | Supabase URL + service key, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL, ANTHROPIC_API_KEY | scrape-cpuc weekly Mon 13:17 UTC; scrape-edgar daily 14:07 (`since`); scrape-transcripts weekly Wed 15:11 (`from-year`); extract-earnings hourly :23 (`event`, `limit`, `include-failed`); all UTC, dispatch inputs in parens. Inputs reach the shell through env and positional args, never string interpolation |
+| GitHub API | pending token (4.5) | GITHUB_DISPATCH_TOKEN, GITHUB_REPO, GITHUB_DISPATCH_REF | admin reprocess button dispatches extract-earnings.yml for one event; fine-grained PAT with Actions read and write |
 | SEC EDGAR | live (4.2) | SCRAPER_USER_AGENT | data.sec.gov submissions API + Archives; fair-use headers; Alphabet CIK 0001652044 |
 
 ---
@@ -414,18 +396,27 @@ programs and snapshots /landscape.
   **Derived copy:** dates and "next filing due" computed from data or
   lib/cpuc-calendar, never hardcoded (2.2 rule).
 - **Client/server lib split:** client components import only from
-  client-safe modules (landscape-types, cpuc-calendar); modules that
-  touch supabase/server are never imported by "use client" files.
+  client-safe modules (landscape-types, cpuc-calendar, earnings-mentions);
+  modules touching supabase/server are never imported by "use client".
 - **external_keys:** scrapers write city ids under their source slug;
   disclosed sources get confidence 'high', estimated lower.
-- **Editorial copy in site_content:** factual sections seeded by Claude
-  Code with `// TODO: user to replace`; page components fall back to
-  inline copy when a key is absent (methodology_body, thesis_paragraphs,
-  landscape_intro/china/regulatory/methodology).
+- **Editorial copy in site_content:** factual sections seeded with
+  `// TODO: user to replace`; page components fall back to inline copy
+  when a key is absent.
 - **Public route layout (canonical):** `app/(public)/layout.tsx` wraps all
   `(public)` routes in PageShell; homepage at root is the exception.
 - **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; `proxy.ts`
   sets `X-Robots-Tag` and root `generateMetadata` emits the `<meta>`.
+- **Extraction drop log (4.5):** every run writes
+  `scraped-raw/extraction-logs/{event_id}/v{version}.json`, one entry per
+  discarded quote with reason ('invalid_schema' or 'unverified'), chunk,
+  and locator; written even when nothing was dropped, so a missing log
+  means "extracted before 4.5", not "lost nothing". Storage not a column,
+  so diagnostics need no migration; a write failure warns, never fails the
+  run. Its quotes are model output and are labelled as such. **Long admin
+  work dispatches, it does not run in the request:** the reprocess button
+  posts a workflow_dispatch to extract-earnings.yml, which a multi-chunk
+  10-K would outrun inside a Vercel function.
 
 ---
 
@@ -435,12 +426,20 @@ programs and snapshots /landscape.
 
 **Structural debt:**
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
-  0013) with `supabase gen types typescript --linked`; magic-link prod
-  click-through not re-verified since 1.6; Baidu/Pony Q2 snapshot refresh
-  after 2026-08-18 earnings; 33 extracted events awaiting review.
-- `audit_trigger_fn` hard-coded to `NEW.id`; non-UUID PK tables excluded.
+  0013); magic-link prod click-through not re-verified since 1.6;
+  Baidu/Pony Q2 snapshot refresh after 2026-08-18 earnings;
+  disclosed_metrics rows promoted in the 4.5 review pass not yet
+  spot-checked (Other Bets figures promoted as Waymo, same-date events
+  colliding on the (company, metric, as_of) upsert); no
+  GITHUB_DISPATCH_TOKEN, so reprocess stays disabled.
+- The 33 backfilled events predate the drop log, so their dropped quotes
+  (5 on the Q3 2025 call among them) exist only as counts; reprocessing
+  produces a log, but the model is not deterministic and may drop a
+  different set. Source-viewer passage ids are re-derived by the current
+  parser, so a text.ts change can shift them out of step with old locators.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
-  built; `service_area_geojson` unused.
+  built; `service_area_geojson` unused. `audit_trigger_fn` hard-coded to
+  `NEW.id`; non-UUID PK tables excluded.
 - Planned routes not yet built: /financials, /earnings, /safety,
   /outlook, /unit-economics. Pre-2025 CPUC baseline and CPUC
   incident_metrics not ingested (later phases).
@@ -466,7 +465,8 @@ app/
                              milestones, sources, fleet-snapshots,
                              ride-estimates, financial-periods,
                              disclosed-metrics, programs, snapshots,
-                             site-content, earnings review queue)
+                             site-content, earnings/ (list, [id] review
+                             queue, [id]/source stored-source viewer))
   api/cron/scraper-health/   daily CPUC freshness report
 
 components/
@@ -481,19 +481,19 @@ components/
   milestones/                MilestoneCard
   landscape/                 OperatorTable, SupervisionStrip,
                              OperatorMap(+Client), CpucComparisonChart
-  admin/                     ConfirmDeleteButton
+  admin/                     ConfirmDeleteButton, MentionCard
 
 lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
-  cpuc-calendar, landscape (server), landscape-types (client-safe)
-  glossary/index.ts, milestones/tags.ts, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}.ts
-  extraction/{schema,text,extract,run}.ts
+  cpuc-calendar, landscape (server), landscape-types (client-safe),
+  earnings-review (server), earnings-mentions (client-safe)
+  glossary/, milestones/tags, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}
+  extraction/{schema,text,extract,drop-log,run}
   supabase/                  server, admin, browser, types
 
 supabase/                    migrations/ 0001-0013; seed.sql (6 companies)
 scripts/                     run-scraper-{cpuc,edgar,transcripts}, run-extraction,
-                             test-*-parser, test-extraction,
-                             and idempotent seed-*/update-*/fix-* scripts
-.github/workflows/           scrape-{cpuc,transcripts}.yml (weekly), scrape-edgar.yml
-                             (daily), extract-earnings.yml (hourly)
+                             test-*, idempotent seed-*/update-*/fix-*
+.github/workflows/           scrape-{cpuc,transcripts} weekly, scrape-edgar daily,
+                             extract-earnings hourly
 ```

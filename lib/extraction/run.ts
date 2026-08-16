@@ -21,6 +21,7 @@ import {
   PRICE_USD_PER_MTOK_OUT,
 } from "./schema";
 import { extractChunk, makeAnthropicCaller, type ModelCaller, type Usage } from "./extract";
+import { STORAGE_BUCKET, writeDropLog, type DroppedQuote } from "./drop-log";
 import {
   chunkPassages,
   passagesFromHtml,
@@ -28,8 +29,6 @@ import {
   selectRelevantPassages,
   type Passage,
 } from "./text";
-
-const STORAGE_BUCKET = "scraped-raw";
 
 type Client = SupabaseClient<Database>;
 type EventRow = Database["public"]["Tables"]["earnings_events"]["Row"];
@@ -45,6 +44,9 @@ export interface EventResult {
   dropped: number;
   deduped: number;
   usage: Usage;
+  // False when the run produced a drop log but Storage refused it, so the
+  // review queue's "no log yet" state stays honest about why.
+  drop_log_written?: boolean;
   error?: string;
 }
 
@@ -117,11 +119,13 @@ export async function processEvent(
 
     const context = { fiscal_period: event.fiscal_period, event_type: event.event_type, event_date: event.event_date };
     const rows: Database["public"]["Tables"]["waymo_mentions"]["Insert"][] = [];
+    const dropped: DroppedQuote[] = [];
     for (const chunk of chunks) {
       const r = await extractChunk(chunk, context, callModel);
       base.usage.input_tokens += r.usage.input_tokens;
       base.usage.output_tokens += r.usage.output_tokens;
-      base.dropped += r.dropped_unverified;
+      dropped.push(...r.dropped);
+      base.dropped += r.dropped.length;
       for (const m of r.mentions) {
         rows.push({
           earnings_event_id: event.id,
@@ -175,6 +179,20 @@ export async function processEvent(
       })
       .eq("id", event.id);
     if (updErr) throw new Error(`updating event: ${updErr.message}`);
+
+    // The drop log is written last and always, including when nothing was
+    // dropped: its presence is what lets the review queue distinguish "this
+    // extraction lost nothing" from "this event predates the log".
+    base.drop_log_written = await writeDropLog(client, {
+      event_id: event.id,
+      extraction_version: EXTRACTION_VERSION,
+      extraction_model: EXTRACTION_MODEL,
+      run_at: new Date().toISOString(),
+      chunks: base.chunks,
+      mentions_kept: base.mentions,
+      duplicates_removed: base.deduped,
+      dropped,
+    });
     base.status = "extracted";
   } catch (err) {
     base.error = err instanceof Error ? err.message : String(err);
@@ -241,7 +259,7 @@ export async function runExtraction(opts: RunOptions = {}): Promise<RunResult> {
       const cost = estimateCostUsd(r.usage);
       console.log(
         `[extract] ${r.label}: ${r.status}; ${r.passages_relevant}/${r.passages_total} passages, ${r.chunks} chunks, ` +
-          `${r.mentions} mentions (${r.dropped} dropped unverified, ${r.deduped} duplicate), ${r.usage.input_tokens} in / ${r.usage.output_tokens} out (~$${cost.toFixed(3)} est.)` +
+          `${r.mentions} mentions (${r.dropped} dropped, ${r.deduped} duplicate), ${r.usage.input_tokens} in / ${r.usage.output_tokens} out (~$${cost.toFixed(3)} est.)` +
           (r.error ? ` ERROR ${r.error}` : "")
       );
     }
@@ -257,7 +275,7 @@ export async function runExtraction(opts: RunOptions = {}): Promise<RunResult> {
         const cost = estimateCostUsd(r.usage);
         return r.status === "extracted"
           ? `${r.label}: ${r.mentions} mentions from ${r.chunks} chunk(s), ${r.usage.input_tokens.toLocaleString()} in / ${r.usage.output_tokens.toLocaleString()} out tokens (~$${cost.toFixed(2)} est.)` +
-              (r.dropped > 0 ? `, ${r.dropped} unverified quote(s) dropped` : "")
+              (r.dropped > 0 ? `, ${r.dropped} quote(s) dropped (see the drop log in the review queue)` : "")
           : `${r.label}: FAILED (${r.error})`;
       });
       const failed = result.processed.filter((r) => r.status === "failed").length;

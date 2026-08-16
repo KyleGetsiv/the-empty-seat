@@ -10,6 +10,10 @@ on:
     - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
+      event:
+        description: 'Reprocess exactly this earnings_events id, any status (overrides limit)'
+        required: false
+        default: ''
       limit:
         description: 'Max events this run (default 3; use 20 for a backfill)'
         required: false
@@ -30,13 +34,21 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      # Dispatch inputs arrive through env and are passed as positional
+      # arguments, never interpolated into the shell command: the reprocess
+      # button in /admin/earnings/[id] dispatches this workflow, so the event
+      # id is a value from a web request.
       - name: Run extraction
         run: |
-          ARGS=""
-          if [ -n "${{ github.event.inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ github.event.inputs.limit }}"; fi
-          if [ "${{ github.event.inputs.include-failed }}" = "true" ]; then ARGS="$ARGS --include-failed"; fi
-          npx tsx scripts/run-extraction.ts $ARGS
+          set --
+          if [ -n "$INPUT_EVENT" ]; then set -- "$@" --event "$INPUT_EVENT"; fi
+          if [ -n "$INPUT_LIMIT" ]; then set -- "$@" --limit "$INPUT_LIMIT"; fi
+          if [ "$INPUT_INCLUDE_FAILED" = "true" ]; then set -- "$@" --include-failed; fi
+          npx tsx scripts/run-extraction.ts "$@"
         env:
+          INPUT_EVENT: ${{ github.event.inputs.event }}
+          INPUT_LIMIT: ${{ github.event.inputs.limit }}
+          INPUT_INCLUDE_FAILED: ${{ github.event.inputs.include-failed }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

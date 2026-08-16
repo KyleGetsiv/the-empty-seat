@@ -5,6 +5,13 @@
 // against the chunk text. Anything the model returns that cannot be found
 // verbatim in the source is dropped, not stored: the review queue should
 // only ever show quotes a reader can find in the primary document.
+//
+// 4.5: a drop is now described, not just counted. Each discarded mention is
+// returned with its reason (invalid_schema or unverified) and the text the
+// model claimed, so run.ts can persist a per-event log the review queue can
+// show. The two reasons are different problems: invalid_schema is the model
+// getting the contract wrong, unverified is the model quoting text that is
+// not in the document.
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
@@ -14,6 +21,7 @@ import {
   extractionToolInputSchema,
   type ExtractedMention,
 } from "./schema";
+import type { DroppedQuote } from "./drop-log";
 import { renderChunk, verifyQuote, type Chunk } from "./text";
 
 export interface Usage {
@@ -23,8 +31,16 @@ export interface Usage {
 
 export interface ChunkResult {
   mentions: (ExtractedMention & { verified_locator: string })[];
-  dropped_unverified: number;
+  dropped: DroppedQuote[];
   usage: Usage;
+}
+
+// A mention in the drop log failed validation by definition, so its fields
+// cannot be assumed to be the right shape. Read them defensively.
+function rawString(raw: unknown, key: string): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const v = (raw as Record<string, unknown>)[key];
+  return typeof v === "string" ? v : null;
 }
 
 // Injected so tests can run the pipeline without network access.
@@ -89,25 +105,40 @@ export async function extractChunk(
     throw new Error(`Extraction output failed schema validation: no mentions array in tool input (${JSON.stringify(toolInput).slice(0, 200)})`);
   }
   const mentions: ChunkResult["mentions"] = [];
-  let dropped = 0;
+  const dropped: DroppedQuote[] = [];
   for (const raw of coerced.mentions) {
-    // Per-mention validation: a malformed mention is dropped and counted,
+    // Per-mention validation: a malformed mention is dropped and logged,
     // it does not fail the event.
     const parsed = MentionSchema.safeParse(raw);
     if (!parsed.success) {
-      dropped++;
-      console.warn(`[extract] dropped invalid mention: ${parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
+      const detail = parsed.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join("; ");
+      dropped.push({
+        reason: "invalid_schema",
+        chunk: chunk.index + 1,
+        locator: rawString(raw, "locator"),
+        quote_text: rawString(raw, "quote_text") ?? "",
+        mention_type: rawString(raw, "mention_type"),
+        detail,
+      });
+      console.warn(`[extract] dropped invalid mention: ${detail}`);
       continue;
     }
     const m = parsed.data;
     const found = verifyQuote(m.quote_text, m.locator, chunk);
     if (!found) {
-      dropped++;
+      dropped.push({
+        reason: "unverified",
+        chunk: chunk.index + 1,
+        locator: m.locator,
+        quote_text: m.quote_text,
+        mention_type: m.mention_type,
+        detail: `Not found verbatim in ${m.locator} or anywhere else in this chunk.`,
+      });
       continue;
     }
     // Speaker comes from the source passage, not the model, so it cannot drift.
     const passage = chunk.passages.find((p) => p.id === found)!;
     mentions.push({ ...m, speaker: passage.speaker, verified_locator: found });
   }
-  return { mentions, dropped_unverified: dropped, usage };
+  return { mentions, dropped, usage };
 }
