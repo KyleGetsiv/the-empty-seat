@@ -114,9 +114,13 @@ export function CoverageMap({ cities, onTiers }: Props) {
         }
       }
 
-      // State presence fill beneath everything. Opacity is held down because
-      // the cohort service-area circles below are 25% opacity fills and would
-      // otherwise disappear over the darkest step of the ramp.
+      // State presence fill beneath everything. Opacity is held well down for
+      // two reasons: the cohort service-area circles are 25% opacity fills,
+      // and the cohort dot ramp runs pale at the recent end (#B8D4E8 for 2026
+      // launches). At 0.55 the deepest fill composited to luminance 0.652
+      // against that dot's 0.631, technically lighter but far too close to
+      // read, which washed out Nashville, Las Vegas and Miami on their own
+      // shaded states. 0.35 composites to 0.751 and separates properly.
       addStateFill(
         map,
         validCities.map((c) => ({
@@ -124,16 +128,26 @@ export function CoverageMap({ cities, onTiers }: Props) {
           latitude: c.latitude,
           longitude: c.longitude,
         })),
-        { fillOpacity: 0.55 }
+        { fillOpacity: 0.35 }
       ).then((tiers) => {
         if (tiers) onTiers?.(tiers);
       });
 
-      // Separate cities into rendering groups
+      // Every city gets one uniform dot; only cities with a disclosed
+      // service area also get a true-to-scale polygon.
+      //
+      // These used to be alternatives, which inverted the visual hierarchy:
+      // a disclosed area rendered as its real size (Phoenix's 315 sq mi is
+      // 3.9px at zoom 4, Orlando's 50 sq mi is 1.5px) while an undisclosed
+      // one rendered as a fixed 8px pin. A service area would need to reach
+      // ~1,300 sq mi just to equal that pin, so the cities we knew least
+      // about were the largest marks on the map. Size now carries only
+      // service area, at national zoom it carries nothing at all, and
+      // non-disclosure is the quiet absence of a polygon rather than a
+      // bigger dot.
       const circlesPublic: GeoJSON.Feature[] = [];
       const circlesWaitlist: GeoJSON.Feature[] = [];
-      const pinsPublic: GeoJSON.Feature[] = [];
-      const pinsWaitlist: GeoJSON.Feature[] = [];
+      const cityPoints: GeoJSON.Feature[] = [];
 
       for (const city of validCities) {
         const cohort = getCohortBucket(city.launch_date);
@@ -146,7 +160,14 @@ export function CoverageMap({ cities, onTiers }: Props) {
           service_area_sq_mi: city.service_area_sq_mi,
           status: city.status,
           cohortColor: cohort.color,
+          isPublic: isPublic ? 1 : 0,
         };
+
+        cityPoints.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [city.longitude, city.latitude] },
+          properties: sharedProps,
+        });
 
         if (hasArea) {
           const radiusM = sqMiToRadiusMeters(city.service_area_sq_mi!);
@@ -157,14 +178,6 @@ export function CoverageMap({ cities, onTiers }: Props) {
           };
           if (isPublic) circlesPublic.push(feature);
           else circlesWaitlist.push(feature);
-        } else {
-          const feature: GeoJSON.Feature = {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [city.longitude, city.latitude] },
-            properties: sharedProps,
-          };
-          if (isPublic) pinsPublic.push(feature);
-          else pinsWaitlist.push(feature);
         }
       }
 
@@ -210,32 +223,34 @@ export function CoverageMap({ cities, onTiers }: Props) {
         },
       });
 
-      // Add point layers for no-sq_mi pins
-      map.addSource("pins-public", { type: "geojson", data: fc(pinsPublic) });
+      // One uniform dot per city, on top of the polygons so it stays the
+      // city marker as the service area grows around it on zoom. Matches the
+      // landscape map's encoding: solid = public, ringed = limited access.
+      // The white halo keeps the dot legible over the state fill.
+      map.addSource("city-points", { type: "geojson", data: fc(cityPoints) });
       map.addLayer({
-        id: "pins-public-layer",
+        id: "city-halo",
         type: "circle",
-        source: "pins-public",
+        source: "city-points",
         paint: {
-          "circle-radius": 8,
-          "circle-color": ["get", "cohortColor"],
-          "circle-opacity": 1,
-          "circle-stroke-color": "#FFFFFF",
-          "circle-stroke-width": 2,
+          "circle-radius": 9,
+          "circle-color": "#FFFFFF",
+          // Needed at national zoom to separate the dot from the state fill,
+          // but at metro zoom it would punch a white hole in the middle of a
+          // large service area, so it fades out as the polygon takes over.
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 8, 0],
         },
       });
-
-      map.addSource("pins-waitlist", { type: "geojson", data: fc(pinsWaitlist) });
       map.addLayer({
-        id: "pins-waitlist-layer",
+        id: "city-dot",
         type: "circle",
-        source: "pins-waitlist",
+        source: "city-points",
         paint: {
-          "circle-radius": 8,
+          "circle-radius": ["case", ["==", ["get", "isPublic"], 1], 6.5, 5.5],
           "circle-color": ["get", "cohortColor"],
-          "circle-opacity": 0.6,
-          "circle-stroke-color": "#FFFFFF",
-          "circle-stroke-width": 2,
+          "circle-opacity": ["case", ["==", ["get", "isPublic"], 1], 1, 0.85],
+          "circle-stroke-color": ["get", "cohortColor"],
+          "circle-stroke-width": ["case", ["==", ["get", "isPublic"], 1], 0, 2],
         },
       });
 
@@ -246,8 +261,7 @@ export function CoverageMap({ cities, onTiers }: Props) {
       const interactiveLayers = [
         "circles-public-fill",
         "circles-waitlist-fill",
-        "pins-public-layer",
-        "pins-waitlist-layer",
+        "city-dot",
       ];
 
       function showPopup(e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) {
