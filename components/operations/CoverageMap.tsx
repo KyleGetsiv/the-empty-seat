@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { getCohortBucket } from "@/lib/cohorts";
+import { addStateFill } from "@/lib/state-fill-layer";
+import type { StateTier } from "@/lib/state-tiers";
 import { format, parseISO } from "date-fns";
 
 export interface MapCity {
@@ -18,6 +20,10 @@ export interface MapCity {
 
 interface Props {
   cities: MapCity[];
+  // Reports back which state tiers actually rendered, so the legend can list
+  // only the steps present. Waymo's announced cities carry no launch_date and
+  // are filtered out upstream, so tier 1 never appears on this map.
+  onTiers?: (tiers: Record<string, StateTier>) => void;
 }
 
 function formatMonthYear(dateStr: string) {
@@ -51,7 +57,7 @@ function sqMiToRadiusMeters(sqMi: number): number {
   return Math.sqrt((sqMi * 2_589_988) / Math.PI);
 }
 
-export function CoverageMap({ cities }: Props) {
+export function CoverageMap({ cities, onTiers }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -107,6 +113,21 @@ export function CoverageMap({ cities }: Props) {
           map.setLayoutProperty(layer.id, "visibility", "none");
         }
       }
+
+      // State presence fill beneath everything. Opacity is held down because
+      // the cohort service-area circles below are 25% opacity fills and would
+      // otherwise disappear over the darkest step of the ramp.
+      addStateFill(
+        map,
+        validCities.map((c) => ({
+          status: c.status,
+          latitude: c.latitude,
+          longitude: c.longitude,
+        })),
+        { fillOpacity: 0.55 }
+      ).then((tiers) => {
+        if (tiers) onTiers?.(tiers);
+      });
 
       // Separate cities into rendering groups
       const circlesPublic: GeoJSON.Feature[] = [];
@@ -298,7 +319,7 @@ export function CoverageMap({ cities }: Props) {
       ref={containerRef}
       className="mt-10 w-full overflow-hidden rounded-md border border-border"
       style={{ height: "65vh", minHeight: "360px" }}
-      aria-label="Waymo service area coverage map"
+      aria-label="Waymo service areas, over a fill showing operator presence by state"
     />
   );
 }

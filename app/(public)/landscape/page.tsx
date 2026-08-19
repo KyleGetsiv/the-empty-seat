@@ -57,6 +57,15 @@ export default async function LandscapePage() {
   const allCities = [...waymoCities, ...competitorCities];
   const usCities = allCities.filter((c) => c.country === "US");
 
+  // Supervision per program drives the state fill: a program running with a
+  // safety operator or a human legal driver does not shade a state, so Tesla's
+  // seven metros never read as driverless deployment. Waymo's own cities come
+  // from getWaymoCitiesForMap under the 'waymo-one' slug and are covered by the
+  // Waymo One program's snapshot.
+  const supervisionByProgram = Object.fromEntries(
+    programs.map((p) => [p.slug, p.snapshot?.supervision ?? null])
+  );
+
   return (
     <>
       <section className="border-b border-border">
@@ -132,9 +141,16 @@ export default async function LandscapePage() {
           <p className="mt-3 mb-8 text-muted text-base max-w-2xl">
             United States deployments by operator. Solid markers are public service; ringed
             markers are employee-only or waitlisted; hollow markers are announced. Service areas are
-            not drawn because most operators do not disclose them.
+            not drawn because most operators do not disclose them. State shading marks the most
+            advanced driverless service each state has reached, not how many operators are in it:
+            a program running with a safety operator or a human legal driver leaves the state
+            unshaded, however many markets it has entered.
           </p>
-          <OperatorMapClient cities={usCities} region="us" />
+          <OperatorMapClient
+            cities={usCities}
+            region="us"
+            supervisionByProgram={supervisionByProgram}
+          />
         </Container>
       </section>
 

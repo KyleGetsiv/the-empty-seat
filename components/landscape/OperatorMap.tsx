@@ -10,7 +10,9 @@
 import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import type { LandscapeCity } from "@/lib/landscape-types";
+import type { LandscapeCity, Supervision } from "@/lib/landscape-types";
+import { addStateFill } from "@/lib/state-fill-layer";
+import { supervisionCountsAsDriverless, type StateTier } from "@/lib/state-tiers";
 
 // Editorial palette: accent for Waymo, muted distinct hues for others.
 const PROGRAM_COLORS: Record<string, string> = {
@@ -36,9 +38,15 @@ interface Props {
   cities: LandscapeCity[];
   // 'us' frames the continental US; 'world' frames the whole map.
   region: "us" | "world";
+  // Latest snapshot supervision per program slug. Required to keep supervised
+  // programs out of the state fill: city.status alone would render Tesla's
+  // safety-driver Bay Area service at the same tier as Waymo's paid driverless
+  // service, which is the comparison this site exists to refuse.
+  supervisionByProgram?: Record<string, Supervision | null>;
+  onTiers?: (tiers: Record<string, StateTier>) => void;
 }
 
-export function OperatorMap({ cities, region }: Props) {
+export function OperatorMap({ cities, region, supervisionByProgram, onTiers }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -66,6 +74,25 @@ export function OperatorMap({ cities, region }: Props) {
         if (layer.type === "symbol" && (layer.id.includes("poi") || layer.id.includes("road-label"))) {
           map.setLayoutProperty(layer.id, "visibility", "none");
         }
+      }
+
+      // State presence fill, US frame only: the world map uses naturalEarth and
+      // a states layer would be both projection-mismatched and parochial.
+      if (region === "us") {
+        addStateFill(
+          map,
+          cities.map((c) => ({
+            status: c.status,
+            latitude: c.latitude,
+            longitude: c.longitude,
+            driverless: supervisionCountsAsDriverless(
+              supervisionByProgram?.[c.program_slug] ?? null
+            ),
+          })),
+          { fillOpacity: 1 }
+        ).then((tiers) => {
+          if (tiers) onTiers?.(tiers);
+        });
       }
 
       const features: GeoJSON.Feature[] = cities.map((c) => ({
