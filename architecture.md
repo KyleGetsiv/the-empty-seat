@@ -4,15 +4,16 @@ Living state of the codebase, refreshed at the end of every module that
 changes schema, routes, components, conventions, integrations, or debt.
 Read this at the start of every planning conversation. Not the plan
 (dev-plan.md), not the working agreement (CLAUDE.md): it answers "what
-currently exists." Hard rule: under 500 lines; consolidate past that.
+currently exists." Per-table schema detail lives in `schema.md`. Hard
+rule: under 500 lines; consolidate past that.
 
 ---
 
 ## Last updated
 
-Module: fix(4.5)
+Module: 1.2.c (state fill, marker encoding)
 Date: 2026-08-19
-Commit: promotion restatement fix
+Commit: coverage map marker hierarchy and legend
 
 ---
 
@@ -20,125 +21,10 @@ Commit: promotion restatement fix
 
 ### Tables
 
-#### companies
-Reference table, 14 rows after 4.2 (Waymo, Zoox, Tesla, Nuro, Lucid,
-Uber, Avride, May Mobility, Motional, Pony.ai, WeRide, Baidu Apollo Go,
-Didi, plus Alphabet as SEC filer, not an operator). Columns: `id`, `slug`
-(unique), `display_name`, `founded_year`, `parent_company`, `hq_country`,
-`ownership`, `status_summary` (last three 0010), timestamps.
-
-#### operator_programs, operator_program_roles (0010)
-A program is the unit on the landscape page: the thing on the road.
-`operator_programs`: `id`, `slug` (unique), `display_name`,
-`lead_company_id`, `summary`, `is_active`, timestamps. Roles join
-(composite pk program_id, company_id, role; role in 'av_developer' |
-'vehicle_platform' | 'fleet_operator' | 'network'; no audit trigger,
-acceptable for a pure join). Single-company programs hold all roles;
-Uber's premium program is Nuro + Lucid + Uber; Uber also holds 'network'
-on Waymo One, Apollo Go, Pony, WeRide, Avride, May Mobility, Motional.
-11 programs seeded (`scripts/seed-operator-programs.ts`).
-
-#### competitor_snapshots (0010)
-Point-in-time readings per program; unique (program_id, snapshot_date).
-Metric columns all nullable: `cities_serving_public`,
-`cities_operating_total`, `vehicle_count`, `weekly_rides`,
-`cumulative_rides`, `autonomous_miles_cumulative`, `funding_total_usd`,
-`implied_valuation_usd`. `supervision` check ('driverless',
-'safety_operator', 'mixed', 'human_is_legal_driver'); `disclosure_
-quality` check ('regulatory', 'company_disclosed', 'earnings_disclosed',
-'press_reported', 'estimated'). `source_id`, `notes`, timestamps.
-Seeded 3.2 (11 rows); Apollo Go and Pony need a Q2 refresh after
-2026-08-18 earnings.
-
-#### sources
-Every primary source linked to a data point; scrapers and admins both
-insert. Columns: `id`, `url`, `publisher`, `title`, `published_at`,
-`scraped_at`, `content_hash` (scraper dedupe), `storage_key` (raw doc in
-Storage), `created_at`.
-
-#### cities
-One row per city per company. `status` check (0009): 'announced',
-'waitlist', 'employee' (driverless ops, employee riders only), 'public',
-'paused'. Waymo roster 18 rows (9 public, 2 waitlist, 4 employee, 3
-announced with no launch_date, hidden from timeline/map). `program_id`
-(nullable fk, 0010) links competitor cities to programs; 30 seeded in
-3.2; Waymo rows leave it null and Waymo pages filter by company_id.
-Columns: `id`, `company_id`, `name` (unique with company_id, 0004),
-`metro_area`, `country`, `launch_date`, `public_access_date`,
-`service_area_sq_mi`, `status`, `latitude`, `longitude`, `notes`,
-`service_area_geojson` (jsonb, 0005, unused), `external_keys` (jsonb,
-0006), `program_id`, timestamps.
-
-#### milestones
-Dated events in Waymo's history; drafts (`is_published = false`) are
-admin-only via RLS. Columns: `id`, `company_id`, `event_date`, `headline`,
-`body` (markdown), `tags` (text[]), `source_id`, `kyle_annotation`,
-`is_published` (default false), timestamps.
-
-#### fleet_snapshots
-Point-in-time vehicle counts; `city_id` null = company-wide. Columns:
-`id`, `company_id`, `city_id`, `snapshot_date`, `vehicle_count`,
-`active_vehicle_count`, `source_id`, `notes`, `created_at`.
-
-#### ride_estimates
-Ride volume estimates per company/city; `city_id` null = company-wide
-(the CPUC quarterly series). `confidence` check: 'high'/'medium'/'low'.
-Columns: `id` (pk), `company_id` (fk), `city_id` (nullable fk),
-`period_start`, `period_end`, `rides_per_week` (normalized weekly),
-`avg_fare_usd` (nullable), `source_id` (nullable fk), `confidence`,
-`methodology_note`, `vehicle_miles_traveled` (nullable, 0007, CPUC VMT
-ZEV), `program_id` (nullable fk operator_programs, 0011), `tier`
-('deployment' | 'pilot', nullable, 0011), `created_at`. Waymo's CPUC
-deployment series: company_id = waymo, city_id null, program_id null.
-Pilot series (Zoox, Nuro from Q2 2026): program_id set, tier 'pilot'.
-
-#### financial_periods
-Disclosed or modeled financials by fiscal period; `is_disclosed`
-separates filing-sourced from estimated. Columns: `id`, `company_id`,
-`fiscal_period` ('Q1 2026'), `period_start`, `period_end`, `revenue_usd`,
-`opex_usd`, `capex_usd`, `operating_loss_usd`, `is_disclosed`,
-`source_id`, `methodology_note`, timestamps.
-
-#### disclosed_metrics
-Point-in-time public disclosures (2.3), unique (company, metric, as_of).
-Metric slugs: 'weekly_rides', 'cumulative_trips', 'fleet_size',
-'cities_count'. `attribution` check: 'company' | 'investor' | 'media' |
-'analyst'. Columns: `id`, `company_id`, `metric`, `value`, `as_of`,
-`scope`, `attribution`, `source_id`, `stated_by`, `notes`, timestamps.
-Seeded with Waymo's verified arc (8 weekly_rides incl. Tiger Global
-450K as 'investor', 4 cumulative_trips, 3 fleet_size); also the target
-of metric promotion from the earnings review queue (4.1).
-
-#### earnings_events, waymo_mentions (0012, module 4.1)
-`earnings_events`: one row per source document. `company_id` = filer
-(Alphabet), `subject_company_id` = subject (Waymo), `fiscal_period`,
-`event_type` check ('10-K','10-Q','8-K','earnings_call',
-'shareholder_letter','investor_day','press_release'), `event_date`,
-`source_id`, `storage_key`, `accession_number` (unique; SEC dedupe),
-`processing_status` ('pending','extracted','reviewed','failed'),
-`extraction_version`, `extraction_model`, `processed_at`, `error`,
-`extraction_input_tokens`, `extraction_output_tokens`,
-`extraction_chunks`, `mentions_dropped` (0013), timestamps.
-`waymo_mentions`: one per quote; `mention_type` check (11 values),
-`quote_text`, `speaker`, `extracted_metric` jsonb, `confidence`,
-`kyle_annotation`, `review_status` ('pending','approved','rejected'),
-`page_or_timestamp` (the extraction passage id, resolvable in the source
-viewer), `disclosed_metric_id` (set when approval promotes a metric),
-timestamps. RLS: anon sees events and APPROVED mentions only. Audit and
-updated_at triggers on both. The v1 extracted_metrics table is dropped;
-disclosed_metrics is the metrics store.
-
-#### site_content
-Key/value store for admin-editable editorial copy: `key` (text pk, e.g.
-'thesis_paragraphs'), `markdown_body`, `updated_at`. No audit trigger
-(text pk; see CLAUDE.md audit trigger limitation).
-
-#### audit_log
-Append-only log written by `audit_trigger_fn()`. Admin-read only via
-RLS. `record_id` is UUID; trigger only fires on tables with UUID `id`
-columns. Columns: `id` (pk), `user_id` (nullable), `table_name`,
-`record_id`, `action` ('insert'/'update'/'delete'), `before` (jsonb,
-nullable), `after` (jsonb, nullable), `created_at`.
+Per-table detail is in `schema.md`: what each table means, the convention
+it encodes, and its gotchas. Column lists are in `supabase/migrations/`
+and `lib/supabase/types.ts`. The cross-cutting notes below stay here
+because they are conventions, not reference.
 
 ### Cross-cutting schema notes
 
@@ -284,7 +170,9 @@ snapshots /landscape.
 - **OperatorMap (client) + OperatorMapClient:** lighter map than the Waymo
   CoverageMap: markers only, one color per program (`programColor()`),
   solid/ringed/hollow by status, hover popups, `region` prop 'us' |
-  'world' (naturalEarth for world). Client wrapper renders the legend.
+  'world' (naturalEarth for world). US frame also draws the state presence
+  fill, gated on program supervision; world frame does not. Client wrapper
+  renders the program and state legends.
 
 ### components/milestones/
 
@@ -303,8 +191,11 @@ snapshots /landscape.
   complete year from data (2.2), verb matching the sign; footnote derives
   the next CPUC due date from lib/cpuc-calendar. Pending state when empty.
 - **CoverageMap (client):** Mapbox via CoverageMapClient (dynamic, ssr
-  false). Circle polygons for cities with sq_mi, pins otherwise; non-public
-  dashed; hover popups; editorial palette overrides.
+  false). One uniform dot per city (solid public, ringed limited), colored
+  by cohort; cities with sq_mi also get a true-to-scale polygon that
+  emerges from behind the dot on zoom, halo fading by z8. State presence
+  fill beneath at 0.35 opacity. Wrapper legends state shading, dot color
+  (cohort ramp via `getBucketLegend`), and dot shape.
 
 ---
 
@@ -312,6 +203,13 @@ snapshots /landscape.
 
 ### lib/
 
+- **state-tiers.ts (client-safe) + state-fill-layer.ts:** the state fill.
+  Tier from `cities.status` (public 3, waitlist/employee 2,
+  announced/paused 1), gated by `supervisionCountsAsDriverless`;
+  `computeStateTiers` ray-casts against `public/us-states.json` with a bbox
+  prefilter, highest tier wins, warns in dev when a city matches no state.
+  `addStateFill` inserts fill and outline below the base water layer and
+  no-ops if the fetch fails. Ramp #EDF2F7/#C6D4E2/#9FB6CC.
 - **last-updated.ts:** `getGlobalLastUpdated()` max timestamp across data
   tables (PageShell footer). **milestones/tags.ts:** `MILESTONE_TAGS` (8
   slugs) + `tagLabel()`, single source of tag vocabulary. **cohorts.ts:**
@@ -416,6 +314,17 @@ snapshots /landscape.
   row. Promotion is withdrawn when a mention leaves a promoting type or is
   rejected, deleting the row only if no approved mention still cites it.
   `notes` carries no ids: the `<Metric>` tooltip can surface it publicly.
+- **Map fill is tier, never count (1.2.c):** the state choropleth encodes
+  the most advanced driverless service a state has reached, not deployment
+  density; a count would put Tesla's safety-driver service on the same axis
+  as Waymo's paid driverless, so supervised programs do not shade at all.
+  No supervised band exists because every state hosting one also hosts
+  driverless paid service. Legends say presence, never coverage.
+- **Marker size encodes only what is measured (1.2.c):** size carries
+  service area and nothing else. Encoding data availability as size made
+  undisclosed markets the largest marks on the map (a fixed 8px pin against
+  Phoenix's 3.9px at z4); absence is now the missing polygon. Any color or
+  size channel on a map needs a legend row, or readers infer one.
 - **Extraction drop log (4.5):** every run writes
   `scraped-raw/extraction-logs/{event_id}/v{version}.json`, one entry per
   discarded quote (reason, chunk, locator), written even when nothing was
@@ -459,7 +368,8 @@ snapshots /landscape.
 
 ## Parking lot
 
-- State-level map fill (1.2.c); Robotaxi Tracker as corroborating signal.
+- Robotaxi Tracker as corroborating signal. (State-level map fill done
+  2026-08-19 as a supervision-aware tier ramp, not a density fill.)
 
 ---
 
@@ -483,7 +393,8 @@ components/                  sections/, charts/, ui/, operations/,
                              milestones/, landscape/, admin/
 
 lib/
-  cohorts, disclosed-metrics, site-content, notify, last-updated,
+  cohorts, state-tiers (client-safe), state-fill-layer, disclosed-metrics,
+  site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe),
   earnings-review (server), earnings-promote (server),
   earnings-mentions (client-safe)
@@ -491,6 +402,8 @@ lib/
   extraction/{schema,text,extract,drop-log,run}
   supabase/                  server, admin, browser, types
 
+public/                      us-states.json (51 features, ~66KB, also the
+                             fixture for test-state-tiers)
 supabase/                    migrations/ 0001-0013; seed.sql (6 companies)
 scripts/                     run-scraper-*, run-extraction, test-*, and
                              idempotent seed-*/update-*/fix-* one-offs

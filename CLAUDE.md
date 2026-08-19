@@ -81,7 +81,8 @@ ARCHITECTURE UPDATE (do this in the same commit as the module work)
 After browser verification passes and before proposing the commit:
 
   1. Open architecture.md and update every section affected by this
-     module: new or changed tables (Schema), new routes (Routes), new
+     module: new or changed tables (Schema pointer here, detail in
+     schema.md), new routes (Routes), new
      or changed components (Components), new lib files or integrations
      (Libraries), any new conventions codified (Conventions), any new
      debt or resolved debt items (Known gaps and debt), any new parking-
@@ -94,7 +95,9 @@ After browser verification passes and before proposing the commit:
        Date: <today's date YYYY-MM-DD>
        Commit: <module> work  (e.g. "1.3 work")
 
-  3. Confirm the file stays under 500 lines (`wc -l architecture.md`).
+  3. Confirm architecture.md stays under 500 lines (`wc -l
+     architecture.md`). `schema.md` has no ceiling; it exists so
+     per-table detail can grow without squeezing the snapshot.
      Note: wc -l counts blank lines, so practical content is closer to
      380 lines of text. If the file is at or above 480 lines, stop and
      surface before committing so we can consolidate together rather
