@@ -39,7 +39,18 @@ context.
   after their 2026-08-18 Q2 earnings. Added 3.5.
 - [ ] **Types regeneration.** `supabase gen types typescript --linked >
   lib/supabase/types.ts` run and committed after all migrations through
-  0011 are pushed. Added 3.5.
+  0013 are pushed. Hand-patched for 0006 through 0013 in the meantime.
+  Added 3.5, updated 2026-08-19.
+- [ ] **Reprocess button never exercised.** `/admin/earnings/[id]` renders
+  its reprocess control disabled because `GITHUB_DISPATCH_TOKEN` is unset,
+  so one of module 4.5's deliverables has never run. Needs a fine-grained
+  PAT with Actions read and write, set in Vercel and `.env.local`, then one
+  dispatch confirmed end to end. Added 2026-08-19.
+- [ ] **Post-fix chart verification.** Confirm `DisclosedRidesChart` on the
+  homepage renders the corrected weekly-rides arc: nine points, no doubled
+  steps, Tiger Global's 450K as an open dot above Waymo's own 400K. The
+  fix(4.5) and fix(2.4) scripts wrote straight to the database, so nothing
+  was visible until ISR expired. Added 2026-08-19.
 
 - [x] **City date corrections.** (Applied 2026-08-19.) Two Waymo rows collapsed the waitlist period
   into a single date, which CityLaunchTimeline orders and labels from.

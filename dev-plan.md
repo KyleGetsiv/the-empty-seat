@@ -391,6 +391,21 @@ Build `/financials` as the container (v1 3.5 layout: editorial opening, sticky s
 
 **Acceptance**: a dry run against the live page reproduces the current 11-serving / 21-up-next split exactly; a deliberately broken selector reports an error rather than "no changes"; weekly GitHub Action; Slack notification on any bucket change.
 
+### 4.12 Mention vocabulary and the cumulative_trips promotion path
+
+**Background**: surfaced by the fix(4.5) spot-check on 2026-08-16. `mention_type` `ride_count` conflates two different claims: "now providing more than 400,000 rides every week" and "safely serving more than 4 million passenger trips" are both `ride_count`, and `METRIC_PROMOTION` maps that type to `weekly_rides`, forcing the weekly reading on both. That single ambiguity produced both bad rows fix(4.5) corrected: a full-year 2024 total filed as a cumulative figure, and a cumulative sentence left sourcing a weekly figure under Pichai's name.
+
+Note that the model was right in both cases. `extracted_metric.metric` correctly read `cumulative_trips` on both quotes; only the promotion map overrode it.
+
+**Do**:
+- Key promotion off `extracted_metric.metric` rather than `mention_type`, with `mention_type` as the fallback when the model returned no slug.
+- Give `cumulative_trips` a promotion path, and audit the other `disclosed_metrics` slugs for the same gap.
+- Re-validate the 33 backfilled events against the new mapping and report, do not auto-correct: a promotion change touching already-reviewed human decisions needs a diff a human approves.
+
+**Acceptance**: a cumulative quote promotes to `cumulative_trips` or promotes nothing, never to `weekly_rides`; the fix(4.5) regressions in `scripts/test-promotion.ts` still pass; the re-validation report is reviewed before anything is written.
+
+**Sequencing**: this changes extraction behaviour on a corpus that only grows, so it should land before the next backfill rather than after.
+
 ---
 
 ## Phase 5: Launch

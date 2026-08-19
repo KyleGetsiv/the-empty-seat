@@ -389,7 +389,9 @@ snapshots /landscape.
   branch is a serif paragraph, no Card.
 - **Cohort coloring** via `getCohortBucket(launchDate)` (CoverageMap).
 - **Revalidation:** server actions call `revalidatePath`; DB-level ISR
-  triggers deferred. **Smooth scroll** + `scroll-mt-20`; **lazy-loading**
+  triggers deferred. A script writing straight to the database bypasses
+  this, so its change stays invisible until ISR expires or an admin
+  mutation runs. **Smooth scroll** + `scroll-mt-20`; **lazy-loading**
   via `next/dynamic` `ssr: false`; **admin mutations** via `supabaseAdmin`
   server actions in page files, error pattern `Failed to <verb> <table>
   row: ${error.message}` thrown before revalidate/redirect.
