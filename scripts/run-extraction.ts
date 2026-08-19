@@ -55,10 +55,8 @@ async function main() {
     await dryRun(eventId);
     process.exit(0);
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY is not set");
-    process.exit(1);
-  }
+  // Credential checks are runExtraction's job, not this script's: it has the
+  // Slack notifier, so a missing secret alerts instead of exiting quietly.
   const limitRaw = arg("--limit");
   const belowRaw = arg("--reprocess-below");
   const result = await runExtraction({
@@ -67,8 +65,18 @@ async function main() {
     includeFailed: process.argv.includes("--include-failed"),
     reprocessBelowVersion: belowRaw ? parseInt(belowRaw, 10) : undefined,
   });
-  const failed = result.processed.filter((r) => r.status === "failed").length;
-  process.exit(failed > 0 ? 1 : 0);
+  // Exit code answers "is the pipeline broken", not "did every document
+  // extract". A fatal (missing credentials, database unreachable) is red: it
+  // recurs every hour until someone fixes it. A document that failed to
+  // extract is a warning: it is recorded on the event row, surfaced in the
+  // review queue, already sent to Slack, and will not be retried without
+  // --include-failed. Failing the run for it would put a red X on the
+  // schedule that no amount of re-running clears.
+  const failed = result.processed.filter((r) => r.status === "failed");
+  for (const r of failed) {
+    console.warn(`::warning::[extract] ${r.label} failed to extract: ${r.error ?? "unknown error"}`);
+  }
+  process.exit(result.fatal ? 1 : 0);
 }
 main().catch((err) => {
   console.error(err);

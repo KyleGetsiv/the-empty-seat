@@ -53,6 +53,12 @@ export interface EventResult {
 export interface RunResult {
   processed: EventResult[];
   remaining_pending: number;
+  // Set when the run could not do its job at all: missing credentials, an
+  // unreachable database. Distinct from a per-event 'failed', which means the
+  // pipeline worked and one document did not extract. The caller exits
+  // non-zero on a fatal and only warns on the latter, so a red run in Actions
+  // always means the pipeline itself needs attention.
+  fatal?: string;
 }
 
 type MentionInsert = Database["public"]["Tables"]["waymo_mentions"]["Insert"];
@@ -215,19 +221,28 @@ export interface RunOptions {
 
 export async function runExtraction(opts: RunOptions = {}): Promise<RunResult> {
   const limit = opts.limit ?? 3;
-  const client =
-    opts.client ??
-    (() => {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-      return createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-    })();
-  const callModel = opts.callModel ?? makeAnthropicCaller();
-
   const result: RunResult = { processed: [], remaining_pending: 0 };
 
   try {
+    // Credential checks live inside the try so a missing secret reaches
+    // Slack. They used to run in the entry-point script, which exited before
+    // any notifier existed: the hourly workflow went red for three days
+    // without a single alert.
+    const client =
+      opts.client ??
+      (() => {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+        return createClient<Database>(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+      })();
+    const callModel =
+      opts.callModel ??
+      (() => {
+        if (!process.env.ANTHROPIC_API_KEY) throw new Error("Missing ANTHROPIC_API_KEY");
+        return makeAnthropicCaller();
+      })();
+
     let events: EventRow[] = [];
     if (opts.eventId) {
       const { data } = await client.from("earnings_events").select("*").eq("id", opts.eventId).single();
@@ -293,7 +308,10 @@ export async function runExtraction(opts: RunOptions = {}): Promise<RunResult> {
     }
   } catch (fatal) {
     const msg = `Extraction fatal error: ${fatal instanceof Error ? fatal.message : String(fatal)}`;
-    console.error(`[extract] ${msg}`);
+    result.fatal = msg;
+    // ::error:: surfaces the reason on the run's summary page in Actions, so
+    // the cause is readable without opening the step log.
+    console.error(`::error::[extract] ${msg}`);
     await notifySlack(msg, "error");
   }
   return result;
