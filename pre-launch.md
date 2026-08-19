@@ -41,13 +41,17 @@ context.
   lib/supabase/types.ts` run and committed after all migrations through
   0011 are pushed. Added 3.5.
 
-- [ ] **City date corrections.** Nashville `public_access_date` is 2026-04-07
-  but Waymo opened it to everyone on 2026-06-25; April 7 was the waitlist
-  launch (source: support.google.com/waymo/answer/17200563). Los Angeles has
-  `launch_date` = `public_access_date` = 2024-11-12, which collapses a
-  waitlist period that grew to 300,000 people before the drop; the waitlist
-  start date needs a primary source. Both distort CityLaunchTimeline. Added
-  2026-08-16 from the waymo.com roster spot-check.
+- [x] **City date corrections.** (Applied 2026-08-19.) Two Waymo rows collapsed the waitlist period
+  into a single date, which CityLaunchTimeline orders and labels from.
+  Nashville `public_access_date` should be 2026-06-25, not 2026-04-07 (April
+  7 was the rolling-invite launch; source: support.google.com/waymo/answer/
+  17200563). Los Angeles `launch_date` should be 2024-03-14, not 2024-11-12
+  (Nov 12 is when the 300,000-person waitlist was dropped; service to public
+  riders began Mar 14; source: waymo.com/blog/2024/03/scaling-waymo-one-
+  safely-across-four-cities-this-year). Fix is written and idempotent:
+  `npx tsx scripts/fix-city-dates.ts [--apply]`. Phoenix, Austin and Atlanta
+  legitimately share both dates and are left alone. Added 2026-08-16 from the
+  waymo.com roster spot-check; corrected the same week.
 
 ## Open
 
