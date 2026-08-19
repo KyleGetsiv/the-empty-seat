@@ -343,6 +343,21 @@ As specified in v1 4.5. Nothing extracted is public until approved; this is the 
 
 As specified in v1 4.6 (`/earnings` timeline of events with approved mentions, metrics-evolution view, full-text search, per-event permalinks with OG images).
 
+**Split into 4.6a and 4.6b** (agreed 2026-08-16): five deliverables is too large for one browser-verifiable commit.
+
+- **4.6a**: `/earnings` timeline, per-event permalinks, extraction methodology copy, nav link, revalidation wiring.
+- **4.6b**: metrics-evolution view, verbatim search, shared OG route.
+
+Scope decisions taken at planning time:
+- **Search is a client-side filter**, not a Postgres tsvector migration. The corpus is 33 events and 162 approved mentions, all of which fit in one ISR payload. Revisit past a few thousand mentions.
+- **Permalinks derive their slug** from `fiscal_period` + `event_type` (`alphabet-q1-2026-earnings-call`) and resolve by lookup on those columns. No slug column, no migration. Assumes uniqueness per (period, type).
+- **Events with zero approved mentions render as thin muted rows** ("no Waymo mentions") rather than being hidden. A quarter where Alphabet said nothing about Waymo is a finding, and showing them proves the pipeline is not cherry-picking. The Q2 2026 8-K is the honest example.
+- **The metrics-evolution view must not redraw the homepage arc.** `NationalTrajectory` already plots `disclosed_metrics` weekly rides. The earnings view reads `waymo_mentions` instead, including mentions that never promoted: it answers "when was this said, by whom, in what words", not "how many rides".
+- **Multi-source citation uses the existing `waymo_mentions.disclosed_metric_id` back-link**, queried from the mentions side. One `disclosed_metrics` row keeps one primary `source_id`; no join table, no migration.
+- **The shared `/api/og` route is built in 4.6b**, not deferred to Phase 5.1. Permalinks are the shareable artifact, so 4.6 needs it and 5.1 extends it to the other five surfaces.
+
+**Blocked by**: `fix(4.5)`. The 4.5 review pass promoted six `disclosed_metrics` rows, four of which were wrong (see that commit). 4.6a publishes those figures beside named-executive quotes, so it starts from corrected data.
+
 ### 4.7 Backfill
 
 Run the backfill script for the last 8 quarters of Alphabet filings and calls (Q3 2024 through Q2 2026). This closes the UNVERIFIED item from the briefing (what was said about Waymo on the Q2 2026 call) and seeds the metrics-evolution view with the 100K -> 250K -> 500K weekly-rides disclosure arc.
@@ -360,6 +375,21 @@ As specified in v1 3.2 (`implied_pnl_periods` table, weekly recompute cron for u
 ### 4.10 Financials landing page and ship checkpoint
 
 Build `/financials` as the container (v1 3.5 layout: editorial opening, sticky scroll nav, sections stacked); capex intensity chart (v1 3.3) if data supports it, else defer to Phase 6; deploy; verify; update `architecture.md` and `pre-launch.md`; notify user. The valuation framework (v1 3.4) moves to Phase 8 with the outlook work, where its scenario presets belong.
+
+### 4.11 Waymo site roster scraper
+
+**Background**: the failure mode observed in the May-August hiatus is staleness, and the city roster is the most visible thing that rots. Spot-checked 2026-08-16 against waymo.com: membership was exactly right (the 11 serving-rider cities matched the table's 9 public + 2 waitlist), but Nashville's `public_access_date` was wrong by two and a half months, and Los Angeles collapses a waitlist period into a single date.
+
+**Constraint found while investigating**: waymo.com sorts cities into only two buckets, "Serving Riders In" and "Up Next". It cannot distinguish `public` from `waitlist`, and it cannot distinguish `employee` from `announced`: Las Vegas, Denver, San Diego and Tampa sit under "Up Next" beside Seattle and Tokyo. This scraper therefore maintains **membership, not status**. Status changes still need a human, sourced from the Waymo blog or the support pages (the Nashville open-to-everyone date came from `support.google.com/waymo`, not the marketing site).
+
+**Do**:
+- robots.txt pre-check first and surface the result before any parser is written, as 4.3 did for Motley Fool.
+- Parse the location lists into the two buckets; match against `cities` by name, recording waymo.com's own key in `external_keys` per the existing convention.
+- Report rather than write: a city entering "Serving Riders In" (arrival), a city disappearing (pause or withdrawal), a city entering "Up Next" (announcement). New cities insert with `status 'announced'` for a human to classify; existing rows are never re-statused automatically.
+- A `sources` row per run.
+- **Distinguish "no changes" from "matched nothing" in the health report.** A parser whose selectors have rotted matches zero cities and looks identical to a quiet week. That single failure mode is what would make this scraper worse than no scraper, and it is the acceptance criterion below.
+
+**Acceptance**: a dry run against the live page reproduces the current 11-serving / 21-up-next split exactly; a deliberately broken selector reports an error rather than "no changes"; weekly GitHub Action; Slack notification on any bucket change.
 
 ---
 

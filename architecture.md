@@ -10,9 +10,9 @@ currently exists." Hard rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 4.5
-Date: 2026-08-15
-Commit: 4.5 work
+Module: fix(4.5)
+Date: 2026-08-19
+Commit: promotion restatement fix
 
 ---
 
@@ -224,9 +224,9 @@ snapshots /landscape.
 - **Thesis:** renders `thesis_paragraphs` from `site_content`, else null.
 - **KeyStats:** 4-tile band. Tile 1 prefers disclosed worldwide rides
   (`getLatestDisclosedWeeklyRides()`), CPUC fallback with derived label;
-  tile 2 cities count; tiles 3/4 CPUC trips and miles scoped (2.2) to the
-  latest complete calendar year, labels from data, sub-quarter rows
-  filtered. All tiles use `<Metric>`; `--` when no data.
+  tile 2 cities count (from `cities`, not disclosed_metrics); tiles 3/4 CPUC
+  trips and miles scoped (2.2) to the latest complete calendar year, labels
+  from data. All tiles use `<Metric>`; `--` when no data.
 - **Operations:** server component. Fetches Waymo cities and CPUC
   quarterly data; composes CityLaunchTimeline, QuarterlyTripsChart,
   CoverageMapClient, methodology footnote.
@@ -249,18 +249,18 @@ snapshots /landscape.
 
 ### components/charts/
 
-- **DisclosedRidesChart (client, 2.3):** Recharts ComposedChart over an
-  epoch-ms axis. Company disclosures: monotone line, filled dots;
-  third-party figures: open dots, no line. Every dot is an SVG link to its
-  source URL (2.6, new tab). 1M end-2026 target as a dashed ReferenceLine;
-  legend caption explains the dot convention.
+- **DisclosedRidesChart (client, 2.3):** Recharts ComposedChart, epoch-ms
+  axis. Company disclosures: monotone line, filled dots; third-party: open
+  dots, no line (so Tiger Global's 450K sitting above Waymo's own 400K reads
+  correctly). Dots link to source; 1M end-2026 target as a dashed
+  ReferenceLine.
 
 ### components/admin/
 
 - **ConfirmDeleteButton (client):** two-step delete confirm for admin
-  server-action forms (first click arms, second submits; disarms on blur
-  or 5s). Replaces browser confirm() dialogs, which cannot work on server
-  component forms. Used by every admin delete form (2.6).
+  server-action forms (first click arms, second submits; disarms on blur or
+  5s), replacing confirm() dialogs, which cannot work on server component
+  forms. Used by every admin delete form (2.6).
 - **MentionCard (client, 4.5):** one reviewable mention. Client only so
   the needs-a-number guard can track the type select and value input live:
   a metric-type mention with no number cannot be approved until a value is
@@ -269,12 +269,11 @@ snapshots /landscape.
 
 ### components/landscape/ (3.3)
 
-- **OperatorTable (client):** one row per program, sorted public-serving
-  first then by weekly rides. Cells render "not disclosed" when null;
-  `~` prefix on press-reported/estimated vehicle counts; cities as
-  "public / total"; supervision pill; disclosure-quality badge with
-  as-of month, tooltip carrying notes and source link. Partner roles
-  listed under the operator name.
+- **OperatorTable (client):** one row per program, public-serving first then
+  by weekly rides. "not disclosed" for nulls; `~` on press-reported or
+  estimated counts; cities as "public / total"; supervision pill;
+  disclosure-quality badge with as-of month, tooltip with notes and source;
+  partner roles under the operator name.
 - **SupervisionStrip:** three bands (driverless public paid; supervised or
   not yet public; human is legal driver) from `isDriverlessPublic()` and
   the `human_is_legal_driver` supervision value.
@@ -304,8 +303,8 @@ snapshots /landscape.
   complete year from data (2.2), verb matching the sign; footnote derives
   the next CPUC due date from lib/cpuc-calendar. Pending state when empty.
 - **CoverageMap (client):** Mapbox via CoverageMapClient (dynamic, ssr
-  false). Circle polygons for cities with sq_mi, pins otherwise; non-
-  public dashed; hover popups; editorial palette overrides.
+  false). Circle polygons for cities with sq_mi, pins otherwise; non-public
+  dashed; hover popups; editorial palette overrides.
 
 ---
 
@@ -355,6 +354,8 @@ snapshots /landscape.
   queue's client components and the zod enums in extraction/schema.
   **earnings-review.ts (4.5, server):** `getMentionCountsByEvent()` and
   `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
+  **earnings-promote.ts (fix(4.5), server):** `decidePromotion()` (pure,
+  tested), `promoteMetric()`, `withdrawPromotion()`.
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -407,16 +408,20 @@ snapshots /landscape.
   `(public)` routes in PageShell; homepage at root is the exception.
 - **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; `proxy.ts`
   sets `X-Robots-Tag` and root `generateMetadata` emits the `<meta>`.
+- **Metric promotion is one row per figure (fix(4.5)):** a reaffirmation
+  links to the existing (company, metric, value) row and appends to its
+  notes; only an unseen figure inserts, and an earlier event re-dates the
+  row. Promotion is withdrawn when a mention leaves a promoting type or is
+  rejected, deleting the row only if no approved mention still cites it.
+  `notes` carries no ids: the `<Metric>` tooltip can surface it publicly.
 - **Extraction drop log (4.5):** every run writes
   `scraped-raw/extraction-logs/{event_id}/v{version}.json`, one entry per
-  discarded quote with reason ('invalid_schema' or 'unverified'), chunk,
-  and locator; written even when nothing was dropped, so a missing log
-  means "extracted before 4.5", not "lost nothing". Storage not a column,
-  so diagnostics need no migration; a write failure warns, never fails the
-  run. Its quotes are model output and are labelled as such. **Long admin
-  work dispatches, it does not run in the request:** the reprocess button
-  posts a workflow_dispatch to extract-earnings.yml, which a multi-chunk
-  10-K would outrun inside a Vercel function.
+  discarded quote (reason, chunk, locator), written even when nothing was
+  dropped, so a missing log means "extracted before 4.5". Its quotes are
+  model output and are labelled as such; a write failure warns, never fails
+  the run. **Long admin work dispatches, it does not run in the request:**
+  reprocess posts a workflow_dispatch to extract-earnings.yml, which a
+  multi-chunk 10-K would outrun inside a Vercel function.
 
 ---
 
@@ -427,11 +432,15 @@ snapshots /landscape.
 **Structural debt:**
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
   0013); magic-link prod click-through not re-verified since 1.6;
-  Baidu/Pony Q2 snapshot refresh after 2026-08-18 earnings;
-  disclosed_metrics rows promoted in the 4.5 review pass not yet
-  spot-checked (Other Bets figures promoted as Waymo, same-date events
-  colliding on the (company, metric, as_of) upsert); no
-  GITHUB_DISPATCH_TOKEN, so reprocess stays disabled.
+  Baidu/Pony Q2 snapshot refresh after 2026-08-18 earnings; no
+  GITHUB_DISPATCH_TOKEN, so reprocess stays disabled. 4.5 promotions were
+  spot-checked and corrected 2026-08-19; city date corrections from the
+  same pass are in pre-launch.md.
+- `ride_count` conflates a weekly rate with a to-date total, and
+  `METRIC_PROMOTION` forces the weekly reading on both; that ambiguity
+  produced both errors fix(4.5) corrected. Fix is to key promotion off
+  `extracted_metric.metric` and give cumulative_trips a path. Own module:
+  it changes extraction behaviour.
 - The 33 backfilled events predate the drop log, so their dropped quotes
   (5 on the Q3 2025 call among them) exist only as counts; reprocessing
   produces a log, but the model is not deterministic and may drop a
@@ -454,46 +463,35 @@ snapshots /landscape.
 
 ## Appendix: file structure quick map
 
+Directories only; the Routes and Components sections above enumerate what is
+inside each, and repeating them here is what pushed this file over budget.
+
 ```
 app/
   page.tsx, layout.tsx, globals.css   landing composition, root layout, @theme
-  (public)/                  layout.tsx wraps in PageShell; milestones/
-                             (list, [id]), methodology/ (page, sources/),
-                             landscape/ (3.3)
+  (public)/                  layout.tsx wraps in PageShell; milestones/,
+                             methodology/, landscape/, earnings/ (4.6)
   admin/                     layout.tsx passthrough; login/; (protected)/
-                             auth-gate layout + CRUD dirs (cities, companies,
-                             milestones, sources, fleet-snapshots,
-                             ride-estimates, financial-periods,
-                             disclosed-metrics, programs, snapshots,
-                             site-content, earnings/ (list, [id] review
-                             queue, [id]/source stored-source viewer))
+                             auth-gate layout + one dir per CRUD table,
+                             plus earnings/ (list, [id] review queue,
+                             [id]/source stored-source viewer)
   api/cron/scraper-health/   daily CPUC freshness report
 
-components/
-  sections/                  PageShell, ThesisHero(+Counter), Thesis,
-                             KeyStats, NationalTrajectory, Operations,
-                             RecentMilestones
-  charts/                    DisclosedRidesChart
-  ui/                        Button, Card, Container, Heading, Prose,
-                             Tooltip, Metric, Term, MarkdownBody
-  operations/                CityLaunchTimeline, QuarterlyTripsChart,
-                             CoverageMap(+Client)
-  milestones/                MilestoneCard
-  landscape/                 OperatorTable, SupervisionStrip,
-                             OperatorMap(+Client), CpucComparisonChart
-  admin/                     ConfirmDeleteButton, MentionCard
+components/                  sections/, charts/, ui/, operations/,
+                             milestones/, landscape/, admin/
 
 lib/
   cohorts, disclosed-metrics, site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe),
-  earnings-review (server), earnings-mentions (client-safe)
+  earnings-review (server), earnings-promote (server),
+  earnings-mentions (client-safe)
   glossary/, milestones/tags, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}
   extraction/{schema,text,extract,drop-log,run}
   supabase/                  server, admin, browser, types
 
 supabase/                    migrations/ 0001-0013; seed.sql (6 companies)
-scripts/                     run-scraper-{cpuc,edgar,transcripts}, run-extraction,
-                             test-*, idempotent seed-*/update-*/fix-*
-.github/workflows/           scrape-{cpuc,transcripts} weekly, scrape-edgar daily,
-                             extract-earnings hourly
+scripts/                     run-scraper-*, run-extraction, test-*, and
+                             idempotent seed-*/update-*/fix-* one-offs
+.github/workflows/           scrape-{cpuc,transcripts} weekly, scrape-edgar
+                             daily, extract-earnings hourly
 ```

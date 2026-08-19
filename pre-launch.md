@@ -41,6 +41,14 @@ context.
   lib/supabase/types.ts` run and committed after all migrations through
   0011 are pushed. Added 3.5.
 
+- [ ] **City date corrections.** Nashville `public_access_date` is 2026-04-07
+  but Waymo opened it to everyone on 2026-06-25; April 7 was the waitlist
+  launch (source: support.google.com/waymo/answer/17200563). Los Angeles has
+  `launch_date` = `public_access_date` = 2024-11-12, which collapses a
+  waitlist period that grew to 300,000 people before the drop; the waitlist
+  start date needs a primary source. Both distort CityLaunchTimeline. Added
+  2026-08-16 from the waymo.com roster spot-check.
+
 ## Open
 
 Add new items here as they surface between now and launch.

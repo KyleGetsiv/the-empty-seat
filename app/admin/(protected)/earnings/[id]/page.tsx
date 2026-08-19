@@ -7,6 +7,11 @@ import { PRICE_USD_PER_MTOK_IN, PRICE_USD_PER_MTOK_OUT } from "@/lib/extraction/
 import { readDropLog } from "@/lib/extraction/drop-log";
 import { METRIC_PROMOTION, REVIEW_STATUSES } from "@/lib/earnings-mentions";
 import { getNextUnreviewedEventId } from "@/lib/earnings-review";
+import {
+  promoteMetric,
+  withdrawPromotion,
+  type PromotionContext,
+} from "@/lib/earnings-promote";
 import { MentionCard, type MentionCardData } from "@/components/admin/MentionCard";
 
 type ExtractedMetric = { metric?: string; value?: number; unit?: string; period?: string } | null;
@@ -17,60 +22,14 @@ const DROP_REASON_LABEL: Record<string, string> = {
   unverified: "not found verbatim in the source",
 };
 
-// The three helpers below live at module scope on purpose. A server action's
+// The helpers below live at module scope on purpose. A server action's
 // closure is serialized, and a function captured in it cannot be, so a helper
 // defined inside the component and called from an action fails at render with
 // "Functions cannot be passed directly to Client Components". Marking them
 // "use server" would fix that by publishing each as its own endpoint, which is
 // worse: promoteMetric would become a public "write any disclosed_metrics row"
-// call. At module scope they are ordinary imports, and the actions capture
-// only strings.
-
-// The event fields metric promotion needs, passed explicitly rather than
-// captured from the page's event row.
-interface PromotionContext {
-  subjectId: string;
-  eventDate: string;
-  eventType: string;
-  fiscalPeriod: string;
-  sourceId: string | null;
-}
-
-// Promotes an approved metric mention to a disclosed_metrics row and returns
-// the row id to link back from the mention. Shared by the single-mention and
-// bulk paths so a bulk approve cannot quietly skip promotion.
-async function promoteMetric(
-  ctx: PromotionContext | null,
-  mentionId: string,
-  mentionType: string,
-  value: number
-): Promise<string | null> {
-  const slug = METRIC_PROMOTION[mentionType];
-  if (!slug || !ctx || !Number.isFinite(value) || value <= 0) return null;
-  const { data: dm, error } = await supabaseAdmin
-    .from("disclosed_metrics")
-    .upsert(
-      {
-        company_id: ctx.subjectId,
-        metric: slug,
-        value,
-        as_of: ctx.eventDate,
-        scope: "worldwide",
-        attribution: "company",
-        source_id: ctx.sourceId,
-        stated_by: `${ctx.eventType.replace(/_/g, " ")}, ${ctx.fiscalPeriod}`,
-        notes: `Promoted from earnings extraction; mention ${mentionId}.`,
-      },
-      { onConflict: "company_id,metric,as_of" }
-    )
-    .select("id")
-    .single();
-  if (error) {
-    console.error("[promote disclosed_metric]", error);
-    throw new Error(`Failed to promote metric: ${error.message}`);
-  }
-  return dm.id;
-}
+// call. Imported from lib/earnings-promote since fix(4.5), which is the same
+// thing as far as the closure is concerned: the actions capture only strings.
 
 // Flips the event to 'reviewed' once nothing is pending on it.
 async function settleEventStatus(eventId: string) {
@@ -155,9 +114,16 @@ export default async function ReviewEventPage({
     // guard in MentionCard is what keeps a metric mention from being approved
     // with no value by accident; approving one deliberately lands here with an
     // empty value and simply promotes nothing.
-    if (action === "approve" && METRIC_PROMOTION[mentionType] && metricValueRaw) {
+    const { data: current } = await supabaseAdmin
+      .from("waymo_mentions")
+      .select("disclosed_metric_id")
+      .eq("id", mentionId)
+      .single();
+    const promotes = Boolean(METRIC_PROMOTION[mentionType]);
+
+    if (action === "approve" && promotes && metricValueRaw) {
       const value = Number(metricValueRaw);
-      const dmId = await promoteMetric(promotionContext, mentionId, mentionType, value);
+      const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, mentionType, value);
       if (dmId) {
         patch.disclosed_metric_id = dmId;
         patch.extracted_metric = {
@@ -167,6 +133,12 @@ export default async function ReviewEventPage({
           period: promotionContext?.fiscalPeriod ?? null,
         };
       }
+    } else if (current?.disclosed_metric_id && (!promotes || action === "reject")) {
+      // The mention stopped being a metric mention, or stopped being approved.
+      // Before fix(4.5) the link and its disclosed_metrics row both survived
+      // this, which is how an unsupported cities_count row was left behind.
+      await withdrawPromotion(supabaseAdmin, mentionId, current.disclosed_metric_id);
+      patch.disclosed_metric_id = null;
     }
 
     const { error } = await supabaseAdmin.from("waymo_mentions").update(patch).eq("id", mentionId);
@@ -198,7 +170,7 @@ export default async function ReviewEventPage({
 
       const patch: Database["public"]["Tables"]["waymo_mentions"]["Update"] = { review_status: "approved" };
       if (METRIC_PROMOTION[m.mention_type] && typeof value === "number") {
-        const dmId = await promoteMetric(promotionContext, m.id, m.mention_type, value);
+        const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, m.mention_type, value);
         if (dmId) patch.disclosed_metric_id = dmId;
       }
       const { error } = await supabaseAdmin.from("waymo_mentions").update(patch).eq("id", m.id);
