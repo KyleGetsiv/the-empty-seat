@@ -85,6 +85,7 @@ async function main() {
   const rows = data ?? [];
   const changed: string[] = [];
   const unreliable: string[] = [];
+  const promotedClean: string[] = [];
   const unchanged: string[] = [];
 
   for (const row of rows) {
@@ -111,12 +112,26 @@ async function main() {
       `    mention ${r.id}`,
     ].join("\n");
 
-    // A promoted row's extracted_metric was overwritten on approval, so its
-    // model slug is not the model's. Cannot be re-derived; flag for a human.
+    // A row promoted BEFORE 4.12 had its extracted_metric overwritten with
+    // the mention_type slug, so its stored reading is not the model's. A row
+    // promoted after keeps the model's reading and is trustworthy.
+    //
+    // They are told apart by what the overwrite would have written: it always
+    // wrote METRIC_PROMOTION[mention_type], so a stored slug that DIFFERS
+    // from that cannot be the overwrite's work. A stored slug that matches is
+    // ambiguous (overwritten, or the model simply agreed), so it is flagged
+    // rather than assumed either way.
     if (r.disclosed_metric_id) {
-      unreliable.push(
-        `${line}\n    NOTE: already promoted, so extracted_metric was overwritten on approval. Verify by reading the quote.`
-      );
+      const couldBeOverwritten = (em?.metric ?? null) === before;
+      if (couldBeOverwritten) {
+        unreliable.push(
+          `${line}\n    NOTE: promoted under the old mapping, which overwrote extracted_metric. The stored reading may not be the model's. Verify against the quote.`
+        );
+      } else {
+        promotedClean.push(
+          `${line}\n    OK: the stored reading disagrees with the old mapping, so it survived intact. Promoted under 4.12.`
+        );
+      }
       continue;
     }
     if (before !== after) changed.push(line);
@@ -134,15 +149,58 @@ async function main() {
   console.log(changed.length ? changed.join("\n\n") : "  (none)");
 
   console.log(`\n\nCANNOT BE RE-DERIVED: ${unreliable.length}`);
-  console.log("Already promoted, so the stored reading is the old mapping's, not the model's.");
-  console.log("Check each against its quote by hand. This is the fix(4.5) spot-check set.\n");
+  console.log("Promoted under the old mapping, which overwrote extracted_metric, so the");
+  console.log("stored reading may not be the model's. Check each against its quote by hand.\n");
   console.log(unreliable.length ? unreliable.join("\n\n") : "  (none)");
+
+  console.log(`\n\nPROMOTED WITH THE MODEL'S READING INTACT: ${promotedClean.length}`);
+  console.log("Promoted under 4.12. Nothing to check.\n");
+  console.log(promotedClean.length ? promotedClean.join("\n\n") : "  (none)");
 
   console.log(`\n\nUNCHANGED: ${unchanged.length}`);
   if (showAll && unchanged.length) console.log(`\n${unchanged.join("\n\n")}`);
   else console.log("Re-run with --all to list them.");
 
+  await reportDisclosedMetricHealth();
+
   console.log("\nNothing was written. Correct anything above through the review queue.");
+}
+
+// The failure promotion is meant to avoid is a second row for a figure that
+// already exists. Checking the target table directly is cheaper than trusting
+// that the matching logic behaved.
+async function reportDisclosedMetricHealth() {
+  const { data, error } = await db
+    .from("disclosed_metrics")
+    .select("id, metric, value, as_of, scope, attribution")
+    .order("metric", { ascending: true })
+    .order("as_of", { ascending: true });
+
+  if (error) {
+    console.log(`\n\nDISCLOSED_METRICS HEALTH: read failed (${error.message})`);
+    return;
+  }
+
+  const rows = data ?? [];
+  const byFigure = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = `${r.metric}|${r.value}`;
+    byFigure.set(k, [...(byFigure.get(k) ?? []), r]);
+  }
+  const dupes = [...byFigure.entries()].filter(([, v]) => v.length > 1);
+  const scopes = [...new Set(rows.map((r) => r.scope ?? "(null)"))].sort();
+
+  console.log(`\n\nDISCLOSED_METRICS HEALTH: ${rows.length} rows`);
+  console.log(`Scope labels in use: ${scopes.join(", ")}`);
+  if (dupes.length === 0) {
+    console.log("No duplicate (metric, value) pairs. Promotion linked rather than inserted.");
+    return;
+  }
+  console.log(`DUPLICATE (metric, value) PAIRS: ${dupes.length}. Promotion may have inserted over a seed.`);
+  for (const [k, v] of dupes) {
+    console.log(`  ${k}`);
+    for (const r of v) console.log(`    ${r.as_of}  scope=${r.scope ?? "null"}  ${r.attribution}  ${r.id}`);
+  }
 }
 
 main();
