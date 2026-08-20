@@ -37,6 +37,12 @@ context.
   `/admin/site-content`. Added 3.5; earnings keys added 4.6a, and
   neither row exists yet, so both pages currently render their inline
   fallback copy.
+- [ ] **Duplicate SCRAPER_USER_AGENT in `.env.local`.** The key is
+  defined twice (lines 7 and 17). Whichever the parser reads last
+  wins, so the user agent actually sent to SEC EDGAR may not be the
+  one intended, and EDGAR's fair-use policy expects a real contact
+  string. Delete the stale line and confirm which value is live.
+  Found by the 4.6b architecture accuracy pass.
 - [ ] **Competitor snapshot freshness.** Every `competitor_snapshots`
   row less than one quarter old at launch; Apollo Go and Pony.ai refreshed
   after their 2026-08-18 Q2 earnings. Added 3.5.

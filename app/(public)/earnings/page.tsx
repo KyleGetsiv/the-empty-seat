@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { Heading } from "@/components/ui/Heading";
@@ -5,10 +6,10 @@ import { MarkdownBody } from "@/components/ui/MarkdownBody";
 import { Term } from "@/components/ui/Term";
 import { getSiteContent } from "@/lib/site-content";
 import { getEarningsTimeline, summarizeCorpus } from "@/lib/earnings-public";
-import { periodGroupKey, periodGroupLabel, periodSortValue } from "@/lib/earnings-slug";
 import { formatEventDate } from "@/lib/earnings-mentions";
-import { EventCard } from "@/components/earnings/EventCard";
-import type { PublicEarningsEvent } from "@/lib/earnings-types";
+import { EarningsTimeline } from "@/components/earnings/EarningsTimeline";
+import { TimelineGroups } from "@/components/earnings/TimelineGroups";
+import { DisclosurePosture } from "@/components/earnings/DisclosurePosture";
 
 export const revalidate = 3600;
 
@@ -34,37 +35,6 @@ const METHOD_FALLBACK = `**How a quote gets here.** Filings arrive from the SEC'
 
 **What this page cannot tell you.** Alphabet chooses what to say. A quarter of silence is a fact about Alphabet's disclosure, not about Waymo's business, and the two should not be confused. Figures given on a call are not audited segment reporting. Where a quarter's transcript was never published, the document is absent rather than assumed.`;
 
-interface PeriodGroup {
-  key: string;
-  label: string;
-  events: PublicEarningsEvent[];
-}
-
-function groupByPeriod(events: PublicEarningsEvent[]): PeriodGroup[] {
-  const groups = new Map<string, PublicEarningsEvent[]>();
-  for (const event of events) {
-    const key = periodGroupKey(event.fiscalPeriod);
-    groups.set(key, [...(groups.get(key) ?? []), event]);
-  }
-  return [...groups.entries()]
-    .sort((a, b) => periodSortValue(b[0]) - periodSortValue(a[0]))
-    .map(([key, groupEvents]) => ({
-      key,
-      label: periodGroupLabel(
-        key,
-        groupEvents.map((e) => e.fiscalPeriod)
-      ),
-      // Documents with something to quote lead the group; the silent ones
-      // settle underneath as thin rows, still present, still counted.
-      events: [...groupEvents].sort((a, b) => {
-        const aSilent = a.presence === "has_mentions" ? 0 : 1;
-        const bSilent = b.presence === "has_mentions" ? 0 : 1;
-        if (aSilent !== bSilent) return aSilent - bSilent;
-        return b.eventDate.localeCompare(a.eventDate);
-      }),
-    }));
-}
-
 export default async function EarningsPage() {
   const [events, intro, method] = await Promise.all([
     getEarningsTimeline(),
@@ -73,7 +43,6 @@ export default async function EarningsPage() {
   ]);
 
   const stats = summarizeCorpus(events);
-  const groups = groupByPeriod(events);
 
   return (
     <>
@@ -132,6 +101,13 @@ export default async function EarningsPage() {
         </Container>
       </section>
 
+      <section id="posture" className="border-b border-border scroll-mt-20">
+        <Container className="py-20 sm:py-24">
+          <Heading level={2}>How the talking changed</Heading>
+          <DisclosurePosture events={events} />
+        </Container>
+      </section>
+
       <section id="timeline" className="border-b border-border scroll-mt-20">
         <Container className="py-20 sm:py-24">
           <Heading level={2}>The record</Heading>
@@ -140,28 +116,17 @@ export default async function EarningsPage() {
             grouped with the quarter they are filed beside and keep their own label.
           </p>
 
-          {groups.length === 0 ? (
+          {events.length === 0 ? (
             <p className="font-serif text-[1.75rem] leading-tight text-foreground max-w-2xl">
               Nothing to show yet.
             </p>
           ) : (
-            <div className="flex flex-col gap-16">
-              {groups.map((group) => (
-                <section key={group.key} id={group.key.toLowerCase().replace(/\s+/g, "-")} className="scroll-mt-20">
-                  <h3 className="font-serif text-[1.75rem] sm:text-[2rem] leading-tight text-foreground">
-                    {group.label}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted">
-                    {group.events.length} {group.events.length === 1 ? "document" : "documents"}
-                  </p>
-                  <div className="mt-6">
-                    {group.events.map((event) => (
-                      <EventCard key={event.id} event={event} />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+            /* The fallback is the full unfiltered record, server rendered, so
+               the static HTML carries everything even though the filter needs
+               useSearchParams and therefore a boundary. */
+            <Suspense fallback={<TimelineGroups events={events} />}>
+              <EarningsTimeline events={events} />
+            </Suspense>
           )}
         </Container>
       </section>

@@ -94,3 +94,41 @@ export function isFullYearPeriod(fiscalPeriod: string): boolean {
 export function periodGroupLabel(groupKey: string, periodsInGroup: string[]): string {
   return periodsInGroup.some(isFullYearPeriod) ? `${groupKey} and full year` : groupKey;
 }
+
+// --- timeline grouping ------------------------------------------------------
+//
+// Shared by the server-rendered timeline and the client filter, so the two
+// cannot drift into ordering the same corpus differently.
+
+export interface PeriodGroup<T> {
+  key: string;
+  label: string;
+  events: T[];
+}
+
+export function groupEventsByPeriod<
+  T extends { fiscalPeriod: string; eventDate: string; presence: string }
+>(events: T[]): PeriodGroup<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const event of events) {
+    const key = periodGroupKey(event.fiscalPeriod);
+    groups.set(key, [...(groups.get(key) ?? []), event]);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => periodSortValue(b[0]) - periodSortValue(a[0]))
+    .map(([key, groupEvents]) => ({
+      key,
+      label: periodGroupLabel(
+        key,
+        groupEvents.map((e) => e.fiscalPeriod)
+      ),
+      // Documents with something to show lead the group; silent ones settle
+      // underneath as thin rows, still present and still counted.
+      events: [...groupEvents].sort((a, b) => {
+        const aSilent = a.presence === "has_mentions" ? 0 : 1;
+        const bSilent = b.presence === "has_mentions" ? 0 : 1;
+        if (aSilent !== bSilent) return aSilent - bSilent;
+        return b.eventDate.localeCompare(a.eventDate);
+      }),
+    }));
+}

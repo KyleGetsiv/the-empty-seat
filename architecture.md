@@ -15,9 +15,9 @@ See the architecture maintenance block in CLAUDE.md.
 
 ## Last updated
 
-Module: 4.6a (public earnings section)
+Module: 4.6b page work (posture matrix, filter)
 Date: 2026-08-20
-Commit: 4.6a work
+Commit: 4.6b work
 
 ---
 
@@ -73,7 +73,7 @@ mutations.
 | /milestones, /milestones/[id] | listing with tag chips; detail with source and annotation (404 for drafts) | milestones, sources |
 | /methodology, /methodology/sources | methodology_body markdown; auto-generated source list by publisher | site_content, sources |
 | /landscape | intro, OperatorTable, SupervisionStrip, regulatory section (CpucComparisonChart + Tesla sidebar), US OperatorMap, China/export + world map, methodology | operator_programs, roles, competitor_snapshots, ride_estimates, cities, site_content |
-| /earnings (4.6a) | intro, derived corpus strip, EventCards grouped by fiscal period (newest first), extraction methodology section | earnings_events, approved waymo_mentions, site_content |
+| /earnings (4.6a, 4.6b) | intro, derived corpus strip, DisclosurePosture matrix, filterable timeline grouped by fiscal period, extraction methodology section | earnings_events, approved waymo_mentions, site_content |
 | /earnings/[slug] (4.6a) | permalink: statements and table figures under separate headings, provenance block (source, model, chunks, review state). generateStaticParams over every event; 404 on unknown or colliding slug | earnings_events, approved waymo_mentions |
 
 Not yet built: /unit-economics, /financials, /safety, /outlook.
@@ -194,6 +194,14 @@ cascade to a child dynamic route (4.6a).
   blockquote, speaker as `<cite>`, mention-type chip, and a figure chip
   reading "(published)" in accent when the mention promoted. `compact` for the
   timeline, full for the permalink.
+- **DisclosurePosture (4.6b):** register by fiscal quarter over every approved
+  mention, as a shaded but readable `<table>` rather than a chart. Server
+  component, no client JS. Counts are always printed, so shading is decorative
+  and an empty quarter reads as empty. **EarningsTimeline (4.6b, client):** the
+  `?q=` filter; must sit in a Suspense boundary because of `useSearchParams`.
+  **TimelineGroups:** the grouped list, rendered by the server as that
+  boundary's fallback and by the filter with a narrowed list, so the two
+  cannot diverge.
 - **TableReading:** a quote that is a row from a financial table. Leads with
   the figure from `extracted_metric`, identifies it by the table's own section
   and row labels, demotes the row as filed to an audit line. Never a
@@ -279,6 +287,14 @@ cascade to a child dynamic route (4.6a).
   `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
   **earnings-promote.ts (fix(4.5), server):** `decidePromotion()` (pure,
   tested), `promoteMetric()`, `withdrawPromotion()`.
+- **earnings-posture.ts (4.6b, client-safe):** collapses the 11 mention types
+  to 4 registers and builds the quarter matrix; `buildPostureMatrix()`,
+  `shadeStep()`. A test asserts every type in MENTION_TYPES has an explicit
+  register, so a new type cannot vanish into "other". **earnings-search.ts
+  (4.6b, client-safe):** `mentionHaystack()` builds the filter index from
+  PRESENTED parts, never raw `quote_text`, so the synthesized bracket-and-pipe
+  boundary is never matchable; plus `filterEvents()`. Tests:
+  `test-earnings-posture.ts` (12), `test-earnings-search.ts` (11).
 - **earnings-table.ts (4.6a, client-safe):** reads back the
   `annotateTableRows` prefix. `parseTableReading()` returns columns, section,
   row label, and regrouped cells, or null for prose; plus
@@ -413,10 +429,8 @@ cascade to a child dynamic route (4.6a).
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
   0013); magic-link prod click-through not re-verified since 1.6;
   Baidu/Pony Q2 snapshot refresh, OVERDUE since their 2026-08-18
-  earnings; no
-  GITHUB_DISPATCH_TOKEN, so reprocess stays disabled. 4.5 promotions were
-  spot-checked and corrected 2026-08-19; city date corrections from the
-  same pass are in pre-launch.md.
+  earnings; no GITHUB_DISPATCH_TOKEN, so reprocess stays disabled;
+  duplicate SCRAPER_USER_AGENT in .env.local (see pre-launch.md).
 - `ride_count` conflates a weekly rate with a to-date total, and
   `METRIC_PROMOTION` forces the weekly reading on both; that ambiguity
   produced both errors fix(4.5) corrected. Fix is to key promotion off
@@ -433,9 +447,13 @@ cascade to a child dynamic route (4.6a).
 - Permalink identity rests on (filer, fiscal_period, event_type) being
   unique: true for the corpus, but unconstrained. A 10-K/A or second
   item-2.02 8-K in a quarter collides; the page 404s and logs.
-- 4.6b outstanding: metrics-evolution view, verbatim search (client filter
-  over the payload `/earnings` ships), shared `/api/og`. Permalinks have
-  title and description but no OG image.
+- 4.6b outstanding: only the shared OG route, to be built as
+  `/api/og/[kind]/[id]` deriving strings server-side rather than taking free
+  text, so it cannot stamp arbitrary words on the site's branding. Permalinks
+  have title and description but no OG image. The metrics-evolution view was
+  replaced by DisclosurePosture during the build: 162 approved mentions carry
+  only 4 published figures, so an evolution of figures had nothing to show,
+  and the homepage already charts the disclosed arc from `disclosed_metrics`.
 - No extracted-mention total on `earnings_events` (only `extraction_chunks`
   and `mentions_dropped`), and anon sees approved mentions only, so the page
   cannot tell "extracted several, approved none" from "extracted none".
