@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Database } from "@/lib/supabase/types";
 import { PRICE_USD_PER_MTOK_IN, PRICE_USD_PER_MTOK_OUT } from "@/lib/extraction/schema";
 import { readDropLog } from "@/lib/extraction/drop-log";
-import { METRIC_PROMOTION, REVIEW_STATUSES } from "@/lib/earnings-mentions";
+import { resolvePromotionSlug, REVIEW_STATUSES } from "@/lib/earnings-mentions";
 import { getNextUnreviewedEventId } from "@/lib/earnings-review";
 import {
   promoteMetric,
@@ -122,22 +122,27 @@ export default async function ReviewEventPage({
     // empty value and simply promotes nothing.
     const { data: current } = await supabaseAdmin
       .from("waymo_mentions")
-      .select("disclosed_metric_id")
+      .select("disclosed_metric_id, extracted_metric")
       .eq("id", mentionId)
       .single();
-    const promotes = Boolean(METRIC_PROMOTION[mentionType]);
+    // 4.12: the model's reading of WHICH quantity a quote describes decides
+    // the slug; mention_type is only the fallback when it named none.
+    const currentMetric = (current?.extracted_metric ?? null) as ExtractedMetric;
+    const slug = resolvePromotionSlug(currentMetric?.metric, mentionType);
+    const promotes = Boolean(slug);
 
     if (action === "approve" && promotes && metricValueRaw) {
       const value = Number(metricValueRaw);
-      const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, mentionType, value);
+      const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, slug, value);
       if (dmId) {
         patch.disclosed_metric_id = dmId;
-        patch.extracted_metric = {
-          metric: METRIC_PROMOTION[mentionType],
-          value,
-          unit: null,
-          period: promotionContext?.fiscalPeriod ?? null,
-        };
+        // Write back ONLY the reviewer's number. Before 4.12 this replaced
+        // the whole object with a mention_type-derived slug, a null unit and
+        // the event's fiscal period, destroying the model's reading of the
+        // quote on the way to publishing a contradiction of it. The stored
+        // extraction is evidence and is treated like quote_text: the reviewer
+        // corrects the number, never the model's account of what it measured.
+        patch.extracted_metric = { ...(currentMetric ?? {}), value };
       }
     } else if (current?.disclosed_metric_id && (!promotes || action === "reject")) {
       // The mention stopped being a metric mention, or stopped being approved.
@@ -169,14 +174,15 @@ export default async function ReviewEventPage({
     for (const m of pendingRows ?? []) {
       const em = m.extracted_metric as ExtractedMetric;
       const value = em?.value;
+      const slug = resolvePromotionSlug(em?.metric, m.mention_type);
       // A metric mention with no number needs a decision, so bulk approve
       // leaves it pending rather than approving something that can never
       // promote. The button copy says how many are being left behind.
-      if (METRIC_PROMOTION[m.mention_type] && !(typeof value === "number" && value > 0)) continue;
+      if (slug && !(typeof value === "number" && value > 0)) continue;
 
       const patch: Database["public"]["Tables"]["waymo_mentions"]["Update"] = { review_status: "approved" };
-      if (METRIC_PROMOTION[m.mention_type] && typeof value === "number") {
-        const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, m.mention_type, value);
+      if (slug && typeof value === "number") {
+        const { id: dmId } = await promoteMetric(supabaseAdmin, promotionContext, slug, value);
         if (dmId) patch.disclosed_metric_id = dmId;
       }
       const { error } = await supabaseAdmin.from("waymo_mentions").update(patch).eq("id", m.id);
@@ -220,7 +226,7 @@ export default async function ReviewEventPage({
   const pending = all.filter((m) => m.review_status === "pending");
   const pendingNeedingNumber = pending.filter((m) => {
     const em = m.extracted_metric as ExtractedMetric;
-    return METRIC_PROMOTION[m.mention_type] && !(typeof em?.value === "number" && em.value > 0);
+    return Boolean(resolvePromotionSlug(em?.metric, m.mention_type)) && !(typeof em?.value === "number" && em.value > 0);
   }).length;
   const bulkApprovable = pending.length - pendingNeedingNumber;
 
@@ -247,6 +253,7 @@ export default async function ReviewEventPage({
       kyle_annotation: m.kyle_annotation,
       disclosed_metric_id: m.disclosed_metric_id,
       metric_value: typeof em?.value === "number" ? em.value : null,
+      metric_slug: typeof em?.metric === "string" ? em.metric : null,
       metric_label:
         em?.value != null ? `${em.metric ?? ""} ${em.value} ${em.unit ?? ""} ${em.period ?? ""}`.replace(/\s+/g, " ").trim() : null,
     };

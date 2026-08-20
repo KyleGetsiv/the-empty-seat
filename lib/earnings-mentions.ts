@@ -30,6 +30,46 @@ export const METRIC_PROMOTION: Record<string, string> = {
   fleet_size: "fleet_size",
 };
 
+// --- promotion slug resolution (4.12) --------------------------------------
+//
+// The disclosed_metrics slugs a mention may promote to. Note what is absent:
+// revenue_usd, operating_loss_usd and capex_usd are valid extraction slugs
+// but have no disclosed_metrics home until the Other Bets walk (4.8), so a
+// mention carrying one promotes NOTHING rather than falling through.
+export const PROMOTABLE_METRICS = [
+  "weekly_rides",
+  "cumulative_trips",
+  "fleet_size",
+  "cities_count",
+] as const;
+
+export function isPromotableMetric(slug: string): boolean {
+  return (PROMOTABLE_METRICS as readonly string[]).includes(slug);
+}
+
+// Which disclosed_metrics slug an approved mention publishes as.
+//
+// The model's own reading wins. `mention_type` is only a fallback for when
+// the model named no quantity, because that type is too coarse to decide
+// with: `ride_count` covers both "more than 400,000 rides every week" and
+// "more than 4 million passenger trips to date", and METRIC_PROMOTION forced
+// the weekly reading on both. That single ambiguity produced both bad rows
+// fix(4.5) corrected, and in both cases the model had already read
+// `cumulative_trips` correctly; only the map overrode it.
+//
+// A model slug that is valid but not promotable returns null rather than
+// falling back. Falling back would file a revenue figure as weekly rides,
+// which is the original bug wearing a different hat.
+export function resolvePromotionSlug(
+  metricSlug: string | null | undefined,
+  mentionType: string
+): string | null {
+  if (metricSlug && metricSlug !== "other") {
+    return isPromotableMetric(metricSlug) ? metricSlug : null;
+  }
+  return METRIC_PROMOTION[mentionType] ?? null;
+}
+
 export const REVIEW_STATUSES = ["pending", "approved", "rejected"] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 

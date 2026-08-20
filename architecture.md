@@ -15,9 +15,9 @@ See the architecture maintenance block in CLAUDE.md.
 
 ## Last updated
 
-Module: 4.6b complete (posture, filter, OG route)
+Module: 4.12 (promotion keyed off the model's reading)
 Date: 2026-08-20
-Commit: 4.6b OG route
+Commit: 4.12 work
 
 ---
 
@@ -286,8 +286,12 @@ cascade to a child dynamic route (4.6a).
   queue's client components and the zod enums in extraction/schema.
   **earnings-review.ts (4.5, server):** `getMentionCountsByEvent()` and
   `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
-  **earnings-promote.ts (fix(4.5), server):** `decidePromotion()` (pure,
-  tested), `promoteMetric()`, `withdrawPromotion()`.
+  **earnings-promote.ts (fix(4.5), 4.12, server):** `decidePromotion()`
+  (pure, tested) now takes an already-resolved slug and filters candidates on
+  `metric`; `promoteMetric()`, `withdrawPromotion()`. Slug resolution lives in
+  `resolvePromotionSlug()` (earnings-mentions.ts) so deciding WHICH quantity a
+  quote describes and deciding whether that quantity is already on record are
+  separate, separately tested problems.
 - **earnings-card.ts (4.6b, client-safe):** `cardHeadline()` picks a social
   card's headline: prose first, then a figure rendered as a figure, then the
   presence sentence. Extracted from the route so the "a table row never
@@ -372,6 +376,27 @@ cascade to a child dynamic route (4.6a).
   `(public)` routes in PageShell; homepage at root is the exception.
 - **Discoverability gate:** `SITE_PUBLIC=true` lifts noindex; `proxy.ts`
   sets `X-Robots-Tag` and root `generateMetadata` emits the `<meta>`.
+- **The model's reading of a quote is evidence, not a draft (4.12):**
+  promotion keys off `extracted_metric.metric`, with `mention_type` only as
+  the fallback when the model named no quantity, because `ride_count` covers
+  both "400,000 rides every week" and "4 million trips to date" and the old
+  map forced the weekly reading on both. A valid slug with no
+  `disclosed_metrics` home promotes nothing rather than falling back.
+  Approval no longer rewrites `extracted_metric`: it previously replaced the
+  object wholesale on promotion, destroying the model's slug, unit and period
+  at the moment it was overruled, which is also why already-promoted rows
+  cannot be re-audited. The reviewer edits the number, never the model's
+  account of what it measured.
+- **Scope vocabulary is aliased, not reconciled (4.12):** all 17 seeded
+  `disclosed_metrics` rows carry `scope 'US'` (Waymo was US-only when those
+  figures were stated) while promotion writes `'worldwide'`, so promotion
+  could never match a seed: it inserted, collided on the unique
+  (company_id, metric, as_of) index, and the upsert overwrote the seed's
+  scope, stated_by, notes and source. Hidden until now because the four
+  promotions run so far all linked to pipeline-created rows.
+  `COMPANY_WIDE_SCOPES` treats the two as equivalent. EXPIRES when Waymo
+  carries public riders outside the US (Tokyo), at which point the data needs
+  one vocabulary rather than an alias set.
 - **Metric promotion is one row per figure (fix(4.5)):** a reaffirmation
   links to the existing (company, metric, value) row and appends to its
   notes; only an unseen figure inserts, and an earlier event re-dates the
@@ -445,11 +470,20 @@ cascade to a child dynamic route (4.6a).
   Baidu/Pony Q2 snapshot refresh, OVERDUE since their 2026-08-18
   earnings; no GITHUB_DISPATCH_TOKEN, so reprocess stays disabled;
   duplicate SCRAPER_USER_AGENT in .env.local (see pre-launch.md).
-- `ride_count` conflates a weekly rate with a to-date total, and
-  `METRIC_PROMOTION` forces the weekly reading on both; that ambiguity
-  produced both errors fix(4.5) corrected. Fix is to key promotion off
-  `extracted_metric.metric` and give cumulative_trips a path. Own module:
-  it changes extraction behaviour.
+- Two mentions await a decision from the 4.12 audit. Q2 2024 (Pichai,
+  2,000,000 cumulative trips) is correct and should link to the seeded 2M row
+  now that scope matching works. Q4 2024 (Pichai, 4,000,000) is probably a
+  full-year 2024 total, not a running total: the seeded series already holds
+  5,000,000 as of 2024-12-18, so publishing 4M in Feb 2025 would make
+  cumulative_trips non-monotonic and reinstate the row fix(4.5) removed. Read
+  the full quote before approving; the honest outcome may be that it
+  publishes nothing until an annual-total metric exists.
+- `disclosed_metrics` has no annual-total metric, so a full-year figure has
+  nowhere correct to go and is either dropped or misfiled as cumulative.
+- One mention holds one metric, so a quote stating two figures publishes at
+  most one. The Q4 2025 call ("surpassed 20 million fully autonomous trips
+  and are now providing more than 400,000 rides every week") published the
+  weekly figure and dropped the cumulative one, which is separately seeded.
 - The 33 backfilled events predate the drop log, so their dropped quotes
   (5 on the Q3 2025 call among them) exist only as counts; reprocessing
   produces a log, but the model is not deterministic and may drop a

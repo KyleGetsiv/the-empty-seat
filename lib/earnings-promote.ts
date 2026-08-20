@@ -15,7 +15,7 @@
 // reaffirmation appended to that row's notes.
 
 import type { Database } from "@/lib/supabase/types";
-import { METRIC_PROMOTION } from "@/lib/earnings-mentions";
+import { isPromotableMetric } from "@/lib/earnings-mentions";
 
 // The event fields promotion needs, passed explicitly rather than captured
 // from the page's event row so a server action's closure stays serializable.
@@ -28,8 +28,15 @@ export interface PromotionContext {
 }
 
 // A disclosed_metrics row as far as promotion cares about it.
+//
+// `metric` is carried (4.12) so decidePromotion can verify for itself that a
+// candidate describes the same quantity. Previously the caller's query was
+// the only thing keeping weekly_rides rows out of a cumulative_trips
+// decision, which left the tested boundary unable to catch the exact class of
+// mistake this module exists to fix. It is now checked in both places.
 export interface CandidateRow {
   id: string;
+  metric: string;
   as_of: string;
   scope: string | null;
   notes: string | null;
@@ -61,35 +68,74 @@ export function firstDisclosureNote(ctx: PromotionContext): string {
 
 // Idempotent: re-approving the same mention must not append the same sentence
 // twice, and re-running the backfill must not grow notes without bound.
-export function appendReaffirmation(notes: string | null, ctx: PromotionContext): string {
-  const line = reaffirmationNote(ctx);
+//
+// `existingAsOf` (4.12): a row already dated to this event is not being
+// reaffirmed, it is being cited by the occasion that created it. Appending
+// "Reaffirmed in the earnings call for Q2 2024" to a row whose stated_by is
+// already "Sundar Pichai, Alphabet Q2 2024 earnings call" claims the figure
+// was given twice, and notes surface publicly in the <Metric> tooltip.
+export function appendReaffirmation(
+  notes: string | null,
+  ctx: PromotionContext,
+  existingAsOf?: string
+): string {
   const base = (notes ?? "").trim();
+  if (existingAsOf && existingAsOf === ctx.eventDate) return base;
+  const line = reaffirmationNote(ctx);
   if (!base) return line;
   if (base.includes(line)) return base;
   return `${base} ${line}`;
 }
 
-// A candidate is the same figure only if it is the same scope. A hand-seeded
-// row that never set scope is treated as matching, because the 2.3 seed rows
-// are the originals the earnings pipeline should be linking to.
+// Scope labels that have all been used to mean "all of Waymo's service".
+//
+// The 2.3 seed script wrote "US" on all 17 rows because Waymo was US-only
+// when those figures were stated; the pipeline writes "worldwide". Nothing
+// reconciled them, so before 4.12 promotion could never recognise a seeded
+// row as the same figure: it always decided insert, then upserted onto the
+// unique (company_id, metric, as_of) index and silently overwrote the seed's
+// scope, stated_by, notes and source. The bug stayed hidden because the four
+// promotions that had run so far all linked to rows the pipeline itself
+// created.
+//
+// EXPIRY: these stop denoting the same population the moment Waymo carries
+// public riders outside the US. Tokyo makes that a live prospect, and at that
+// point the data needs one scope vocabulary rather than this alias set.
+const COMPANY_WIDE_SCOPES = new Set(["worldwide", "us"]);
+
+// A candidate is the same figure only if it covers the same population. A
+// hand-seeded row that never set scope is treated as matching, because the
+// 2.3 seed rows are the originals the earnings pipeline should link to. A
+// genuinely narrower scope, "california", is a different figure.
 export function isSameScope(row: CandidateRow): boolean {
-  return row.scope === null || row.scope === PROMOTION_SCOPE;
+  if (row.scope === null) return true;
+  return COMPANY_WIDE_SCOPES.has(row.scope.trim().toLowerCase());
 }
 
 // Pure decision step. Callers hand it every disclosed_metrics row already
 // holding this (company, metric, value); it decides link vs insert. Kept
 // separate from the database work so the three promotion paths are testable
 // without a Supabase fake.
+//
+// Takes an ALREADY RESOLVED slug (4.12), not a mention type. Resolution moved
+// to resolvePromotionSlug in lib/earnings-mentions.ts so that deciding which
+// quantity a mention describes and deciding whether that quantity is already
+// on record are separate, separately tested problems. Passing a mention type
+// here was what let `ride_count` mean two different quantities.
 export function decidePromotion(
   candidates: CandidateRow[],
   ctx: PromotionContext | null,
-  mentionType: string,
+  slug: string | null,
   value: number
 ): PromotionDecision {
-  const slug = METRIC_PROMOTION[mentionType];
-  if (!slug || !ctx || !Number.isFinite(value) || value <= 0) return { kind: "none" };
+  if (!slug || !isPromotableMetric(slug) || !ctx || !Number.isFinite(value) || value <= 0) {
+    return { kind: "none" };
+  }
 
-  const matches = candidates.filter(isSameScope).sort((a, b) => a.as_of.localeCompare(b.as_of));
+  const matches = candidates
+    .filter((c) => c.metric === slug)
+    .filter(isSameScope)
+    .sort((a, b) => a.as_of.localeCompare(b.as_of));
   if (matches.length === 0) return { kind: "insert" };
 
   const earliest = matches[0];
@@ -97,10 +143,6 @@ export function decidePromotion(
   // Every existing row postdates this event, so this event is the earlier
   // statement and the row should carry its date.
   return { kind: "link", rowId: earliest.id, redateTo: ctx.eventDate };
-}
-
-export function metricSlugFor(mentionType: string): string | undefined {
-  return METRIC_PROMOTION[mentionType];
 }
 
 type DisclosedMetricsInsert = Database["public"]["Tables"]["disclosed_metrics"]["Insert"];
@@ -140,15 +182,16 @@ export interface PromotionResult {
 export async function promoteMetric(
   db: AdminClient,
   ctx: PromotionContext | null,
-  mentionType: string,
+  slug: string | null,
   value: number
 ): Promise<PromotionResult> {
-  const slug = metricSlugFor(mentionType);
-  if (!slug || !ctx || !Number.isFinite(value) || value <= 0) return { id: null, linked: false };
+  if (!slug || !isPromotableMetric(slug) || !ctx || !Number.isFinite(value) || value <= 0) {
+    return { id: null, linked: false };
+  }
 
   const { data: candidates, error: readError } = await db
     .from("disclosed_metrics")
-    .select("id, as_of, scope, notes")
+    .select("id, metric, as_of, scope, notes")
     .eq("company_id", ctx.subjectId)
     .eq("metric", slug)
     .eq("value", value);
@@ -157,12 +200,12 @@ export async function promoteMetric(
     throw new Error(`Failed to check for an existing disclosure: ${readError.message}`);
   }
 
-  const decision = decidePromotion((candidates ?? []) as CandidateRow[], ctx, mentionType, value);
+  const decision = decidePromotion((candidates ?? []) as CandidateRow[], ctx, slug, value);
   if (decision.kind === "none") return { id: null, linked: false };
 
   if (decision.kind === "link") {
     const existing = (candidates ?? []).find((c) => c.id === decision.rowId) as CandidateRow | undefined;
-    const notes = appendReaffirmation(existing?.notes ?? null, ctx);
+    const notes = appendReaffirmation(existing?.notes ?? null, ctx, existing?.as_of);
     const patch: DisclosedMetricsUpdate = { notes };
     // Re-dating can collide with the unique (company_id, metric, as_of) index
     // if a different figure already sits on that date. The link is the point;

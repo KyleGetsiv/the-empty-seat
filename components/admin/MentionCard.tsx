@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MENTION_TYPES, METRIC_PROMOTION } from "@/lib/earnings-mentions";
+import { MENTION_TYPES, resolvePromotionSlug, metricLabel } from "@/lib/earnings-mentions";
 
 export interface MentionCardData {
   id: string;
@@ -24,6 +24,9 @@ export interface MentionCardData {
   disclosed_metric_id: string | null;
   metric_value: number | null;
   metric_label: string | null;
+  // The model's own reading of which quantity the quote measures (4.12).
+  // This, not mention_type, decides what approving publishes.
+  metric_slug: string | null;
 }
 
 export function MentionCard({
@@ -39,7 +42,11 @@ export function MentionCard({
   const [metricValue, setMetricValue] = useState(mention.metric_value?.toString() ?? "");
   const [approveWithoutNumber, setApproveWithoutNumber] = useState(false);
 
-  const promotesTo = METRIC_PROMOTION[mentionType];
+  // 4.12: the publish target follows the model's slug, with the type as
+  // fallback. Shown explicitly below, because otherwise a reviewer picks
+  // "ride_count", watches it file as cumulative trips, and has nothing on
+  // screen explaining why.
+  const promotesTo = resolvePromotionSlug(mention.metric_slug, mentionType);
   const hasNumber = metricValue.trim() !== "" && Number(metricValue) > 0;
   // A metric-type mention with no number can never reach disclosed_metrics.
   // Approving it silently is how a disclosure goes missing from the site, so
@@ -83,13 +90,24 @@ export function MentionCard({
             <span>extracted: {mention.metric_label}</span>
           </>
         )}
+        <span className="text-gray-300">|</span>
+        {promotesTo ? (
+          <span className="text-gray-700">
+            publishes as <span className="font-medium">{metricLabel(promotesTo)}</span>
+            {mention.metric_slug && mention.metric_slug !== promotesTo && (
+              <span className="text-gray-500"> (model read {mention.metric_slug})</span>
+            )}
+          </span>
+        ) : (
+          <span>publishes no figure</span>
+        )}
       </div>
 
       {needsNumber && mention.review_status === "pending" && (
         <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This is a {mentionType} mention with no number, so approving it promotes nothing to{" "}
-          {promotesTo}. Enter the figure the quote states, or change the type, or approve it as
-          commentary only.
+          This mention would publish as {promotesTo ? metricLabel(promotesTo) : "a figure"} but
+          carries no number, so approving it publishes nothing. Enter the figure the quote states,
+          or change the type, or approve it as commentary only.
           <label className="mt-2 flex items-center gap-2 font-medium">
             <input
               type="checkbox"

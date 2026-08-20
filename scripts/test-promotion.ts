@@ -50,13 +50,20 @@ const q4_2025: PromotionContext = {
 };
 
 function row(over: Partial<CandidateRow> = {}): CandidateRow {
-  return { id: "row-1", as_of: "2026-03-26", scope: PROMOTION_SCOPE, notes: null, ...over };
+  return {
+    id: "row-1",
+    metric: "weekly_rides",
+    as_of: "2026-03-26",
+    scope: PROMOTION_SCOPE,
+    notes: null,
+    ...over,
+  };
 }
 
 async function main() {
 
 await test("a figure nobody has disclosed yet inserts a new row", () => {
-  const d = decidePromotion([], q1_2026, "ride_count", 500000);
+  const d = decidePromotion([], q1_2026, "weekly_rides", 500000);
   assert.equal(d.kind, "insert");
 });
 
@@ -64,7 +71,7 @@ await test("a figure reaffirmed on a later call links instead of duplicating", (
   // The exact 500,000 case: hand-seeded 2026-03-26, restated on the Q1 2026
   // call 2026-04-29. Pre-fix this inserted a second row and put a flat
   // doubled step on the public chart.
-  const d = decidePromotion([row({ as_of: "2026-03-26" })], q1_2026, "ride_count", 500000);
+  const d = decidePromotion([row({ as_of: "2026-03-26" })], q1_2026, "weekly_rides", 500000);
   assert.equal(d.kind, "link");
   if (d.kind !== "link") return;
   assert.equal(d.rowId, "row-1");
@@ -74,7 +81,7 @@ await test("a figure reaffirmed on a later call links instead of duplicating", (
 await test("an earlier statement re-dates a row created by a later event", () => {
   // Backfills do not run in chronological order, so the first row written for
   // a figure is not necessarily the first time it was said.
-  const d = decidePromotion([row({ as_of: "2026-04-29" })], q4_2025, "ride_count", 400000);
+  const d = decidePromotion([row({ as_of: "2026-04-29" })], q4_2025, "weekly_rides", 400000);
   assert.equal(d.kind, "link");
   if (d.kind !== "link") return;
   assert.equal(d.redateTo, "2026-02-04");
@@ -84,7 +91,7 @@ await test("the earliest of several existing rows wins", () => {
   const d = decidePromotion(
     [row({ id: "late", as_of: "2026-04-29" }), row({ id: "early", as_of: "2026-03-26" })],
     q1_2026,
-    "ride_count",
+    "weekly_rides",
     500000
   );
   assert.equal(d.kind, "link");
@@ -92,35 +99,90 @@ await test("the earliest of several existing rows wins", () => {
   assert.equal(d.rowId, "early");
 });
 
+// 4.12. Every one of the 17 seeded rows carries scope "US" while the pipeline
+// writes "worldwide". Before the alias set, promotion could not see a seed as
+// the same figure, so it inserted, collided on (company_id, metric, as_of),
+// and the upsert overwrote the seed's scope, stated_by, notes and source.
+await test("a seeded US row is the same figure as a worldwide promotion", () => {
+  assert.equal(isSameScope(row({ scope: "US" })), true);
+  const seeded = row({ id: "seed-2m", metric: "cumulative_trips", scope: "US", as_of: "2024-07-23" });
+  const d = decidePromotion([seeded], q1_2026, "cumulative_trips", 2_000_000);
+  assert.equal(d.kind, "link");
+  if (d.kind !== "link") return;
+  assert.equal(d.rowId, "seed-2m", "must link to the seed rather than insert over it");
+});
+
+await test("scope matching ignores case and padding", () => {
+  assert.equal(isSameScope(row({ scope: "us" })), true);
+  assert.equal(isSameScope(row({ scope: " Worldwide " })), true);
+});
+
+// The occasion that created a row is not a reaffirmation of it, and notes are
+// public: they surface in the <Metric> tooltip.
+await test("a row already dated to this event gains no reaffirmation line", () => {
+  const sameDay: PromotionContext = { ...q1_2026, eventDate: "2026-04-29" };
+  const existing = "More than 2 million trips to date.";
+  assert.equal(appendReaffirmation(existing, sameDay, "2026-04-29"), existing);
+});
+
+await test("a genuinely later restatement still appends", () => {
+  const out = appendReaffirmation("Seeded note.", q1_2026, "2026-03-26");
+  assert.ok(out.startsWith("Seeded note."));
+  assert.ok(out.includes("Reaffirmed"));
+});
+
 await test("a hand-seeded row with no scope still counts as the same figure", () => {
   // The 2.3 seed rows are the originals the pipeline should link to, and some
   // left scope null. Excluding them would recreate the duplicate problem.
   assert.equal(isSameScope(row({ scope: null })), true);
-  const d = decidePromotion([row({ scope: null })], q1_2026, "ride_count", 500000);
+  const d = decidePromotion([row({ scope: null })], q1_2026, "weekly_rides", 500000);
   assert.equal(d.kind, "link");
 });
 
 await test("a different scope is a different figure, not a restatement", () => {
   assert.equal(isSameScope(row({ scope: "california" })), false);
-  const d = decidePromotion([row({ scope: "california" })], q1_2026, "ride_count", 500000);
+  const d = decidePromotion([row({ scope: "california" })], q1_2026, "weekly_rides", 500000);
   assert.equal(d.kind, "insert");
 });
 
-await test("a non-promoting mention type promotes nothing", () => {
-  // revenue_reference and strategic_commentary carry numbers but have no
-  // disclosed_metrics slug, so they must never reach the table.
-  assert.equal(decidePromotion([], q1_2026, "revenue_reference", 411000000).kind, "none");
-  assert.equal(decidePromotion([], q1_2026, "strategic_commentary", 500000).kind, "none");
+await test("a slug with no disclosed_metrics home promotes nothing", () => {
+  // revenue_usd and capex_usd are valid extraction slugs carrying real
+  // numbers, but they have no disclosed_metrics home until the Other Bets
+  // walk (4.8), so they must never reach the table. Resolution of a mention
+  // type to a slug is tested in scripts/test-promotion-slug.ts.
+  assert.equal(decidePromotion([], q1_2026, "revenue_usd", 411000000).kind, "none");
+  assert.equal(decidePromotion([], q1_2026, null, 500000).kind, "none");
+});
+
+await test("a cumulative figure is decided as cumulative, not as weekly rides", () => {
+  // 4.12 acceptance. The same 4,000,000 already on record as weekly_rides is
+  // a different quantity, so it must insert rather than link. This is the
+  // shape of the bad row fix(4.5) had to correct by hand.
+  const weekly = row({ id: "weekly-row", metric: "weekly_rides", as_of: "2026-01-01" });
+  assert.equal(decidePromotion([weekly], q1_2026, "cumulative_trips", 4000000).kind, "insert");
+
+  const cumulative = row({ id: "cumulative-row", metric: "cumulative_trips", as_of: "2026-01-01" });
+  const d = decidePromotion([cumulative], q1_2026, "cumulative_trips", 4000000);
+  assert.equal(d.kind, "link");
+  if (d.kind !== "link") return;
+  assert.equal(d.rowId, "cumulative-row");
+});
+
+await test("a candidate for a different metric is ignored even if handed in", () => {
+  // The caller filters by metric, but the pure function no longer relies on
+  // that: a mis-filtered query cannot make one quantity restate another.
+  const wrong = row({ id: "wrong-metric", metric: "cities_count" });
+  assert.equal(decidePromotion([wrong], q1_2026, "weekly_rides", 500000).kind, "insert");
 });
 
 await test("a missing or non-positive number promotes nothing", () => {
-  assert.equal(decidePromotion([], q1_2026, "ride_count", 0).kind, "none");
-  assert.equal(decidePromotion([], q1_2026, "ride_count", -5).kind, "none");
-  assert.equal(decidePromotion([], q1_2026, "ride_count", NaN).kind, "none");
+  assert.equal(decidePromotion([], q1_2026, "weekly_rides", 0).kind, "none");
+  assert.equal(decidePromotion([], q1_2026, "weekly_rides", -5).kind, "none");
+  assert.equal(decidePromotion([], q1_2026, "weekly_rides", NaN).kind, "none");
 });
 
 await test("no context promotes nothing", () => {
-  assert.equal(decidePromotion([], null, "ride_count", 500000).kind, "none");
+  assert.equal(decidePromotion([], null, "weekly_rides", 500000).kind, "none");
 });
 
 await test("appending a reaffirmation is idempotent", () => {
