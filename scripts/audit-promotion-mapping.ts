@@ -102,7 +102,9 @@ async function main() {
     const after = resolvePromotionSlug(em?.metric, mentionType);
 
     const line = [
-      `  ${where}  [${mentionType}]${r.speaker ? ` ${r.speaker}` : ""}`,
+      `  ${where}  [${mentionType}]  ${String(r.review_status).toUpperCase()}${
+        r.speaker ? `  ${r.speaker}` : ""
+      }`,
       `    was: ${before ? metricLabel(before) : "nothing"}   now: ${after ? metricLabel(after) : "nothing"}`,
       `    model read: ${em?.metric ?? "no slug"}   value: ${em?.value ?? "none"}`,
       `    "${short(r.quote_text as string)}"`,
@@ -126,7 +128,9 @@ async function main() {
 
   console.log(`CHANGED BY THE NEW MAPPING: ${changed.length}`);
   console.log("These are not yet promoted, so extracted_metric is intact and the diff is real.");
-  console.log("Re-approving one of these in the review queue publishes the 'now' slug.\n");
+  console.log("APPROVED rows publish the 'now' slug only if you approve them again.");
+  console.log("PENDING rows publish it on their next approve, INCLUDING via bulk approve,");
+  console.log("so a pending row you do not want published needs an explicit decision.\n");
   console.log(changed.length ? changed.join("\n\n") : "  (none)");
 
   console.log(`\n\nCANNOT BE RE-DERIVED: ${unreliable.length}`);
