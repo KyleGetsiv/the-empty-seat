@@ -37,6 +37,11 @@ context.
   `/admin/site-content`. Added 3.5; earnings keys added 4.6a, and
   neither row exists yet, so both pages currently render their inline
   fallback copy.
+- [ ] **Set `NEXT_PUBLIC_SITE_URL` when the custom domain lands.**
+  `metadataBase` (app/layout.tsx) falls back to Vercel's production
+  host, so social cards and canonical URLs will point at the
+  `.vercel.app` domain until this is set. Added 4.6b, pairs with the
+  domain swap in 5.2.
 - [ ] **Duplicate SCRAPER_USER_AGENT in `.env.local`.** The key is
   defined twice (lines 7 and 17). Whichever the parser reads last
   wins, so the user agent actually sent to SEC EDGAR may not be the

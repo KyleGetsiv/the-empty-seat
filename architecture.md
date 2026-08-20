@@ -15,9 +15,9 @@ See the architecture maintenance block in CLAUDE.md.
 
 ## Last updated
 
-Module: 4.6b page work (posture matrix, filter)
+Module: 4.6b complete (posture, filter, OG route)
 Date: 2026-08-20
-Commit: 4.6b work
+Commit: 4.6b OG route
 
 ---
 
@@ -101,6 +101,7 @@ cascade to a child dynamic route (4.6a).
 | /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
 | /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
 | /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
+| /api/og/[kind]/[id] (4.6b) | social card renderer. Takes an id, never card text: a free-text endpoint would let anyone stamp arbitrary words on the site's branding, unfixable once share URLs circulate. Node runtime (fs reads the fonts). 5.1 adds a `kind`, not a caller |
 
 ---
 
@@ -287,6 +288,11 @@ cascade to a child dynamic route (4.6a).
   `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
   **earnings-promote.ts (fix(4.5), server):** `decidePromotion()` (pure,
   tested), `promoteMetric()`, `withdrawPromotion()`.
+- **earnings-card.ts (4.6b, client-safe):** `cardHeadline()` picks a social
+  card's headline: prose first, then a figure rendered as a figure, then the
+  presence sentence. Extracted from the route so the "a table row never
+  reaches a card" rule is testable without importing next/og; a card travels
+  without the page around it, so the 4.6a mistake would be worse there.
 - **earnings-posture.ts (4.6b, client-safe):** collapses the 11 mention types
   to 4 registers and builds the quarter matrix; `buildPostureMatrix()`,
   `shadeStep()`. A test asserts every type in MENTION_TYPES has an explicit
@@ -405,6 +411,14 @@ cascade to a child dynamic route (4.6a).
   audit line. Stored quotes are never rewritten to read better, since a
   smoothed quote is indistinguishable from an invented one; the review queue
   keeps `quote_text` read-only for the same reason.
+- **Generated images take an id, never text (4.6b):** `/api/og/[kind]/[id]`
+  derives every string from the database. The shorter design,
+  `/api/og?title=...`, is an open endpoint for stamping arbitrary words onto
+  the site's branding, and it cannot be withdrawn once permalinks are shared.
+  Fonts are vendored as woff in `app/api/og/_fonts/` because satori parses
+  ttf, otf and woff but NOT woff2, and next/font/google never exposes a
+  binary; both faces were verified to produce real outlines rather than
+  silently falling back.
 - **Permalink slugs are generated and matched, never parsed (4.6a):** derived
   from (company slug, fiscal_period, event_type), no column and no migration.
   Resolution generates slugs for every event and compares: parsing is
@@ -447,13 +461,16 @@ cascade to a child dynamic route (4.6a).
 - Permalink identity rests on (filer, fiscal_period, event_type) being
   unique: true for the corpus, but unconstrained. A 10-K/A or second
   item-2.02 8-K in a quarter collides; the page 404s and logs.
-- 4.6b outstanding: only the shared OG route, to be built as
-  `/api/og/[kind]/[id]` deriving strings server-side rather than taking free
-  text, so it cannot stamp arbitrary words on the site's branding. Permalinks
-  have title and description but no OG image. The metrics-evolution view was
-  replaced by DisclosurePosture during the build: 162 approved mentions carry
-  only 4 published figures, so an evolution of figures had nothing to show,
-  and the homepage already charts the disclosed arc from `disclosed_metrics`.
+- 4.6 is complete. The metrics-evolution view was replaced by
+  DisclosurePosture during 4.6b: 162 approved mentions carry only 4 published
+  figures, so an evolution of figures had nothing to show, and the homepage
+  already charts the disclosed arc from `disclosed_metrics`.
+- `metadataBase` (app/layout.tsx) falls back to Vercel's production host, so
+  canonical and card URLs point at `.vercel.app` until `NEXT_PUBLIC_SITE_URL`
+  is set with the custom domain in 5.2. Tracked in pre-launch.md.
+- The OG card has never been rendered by a real deployment; it is verified
+  only by offline font parsing and headline unit tests. Confirm one card in a
+  share debugger before the 5.4 announcement.
 - No extracted-mention total on `earnings_events` (only `extraction_chunks`
   and `mentions_dropped`), and anon sees approved mentions only, so the page
   cannot tell "extracted several, approved none" from "extracted none".

@@ -366,7 +366,11 @@ The one real defect, found in browser verification: table rows were rendering as
 
 The filter indexes presented text, never raw `quote_text`. Indexing the latter would let a phrase search match across the synthetic bracket-and-pipe boundary that `annotateTableRows` introduced, returning hits on strings no filing contains, on a feature whose promise is the word verbatim. `?q=` is read through `useSearchParams`, which forces a Suspense boundary on this ISR route; the fallback is the full unfiltered timeline rendered on the server, so the static HTML still carries the whole record.
 
-Remaining in 4.6b: the shared OG route, to be built as `/api/og/[kind]/[id]` deriving every string server-side rather than accepting free text, so the endpoint cannot be used to stamp arbitrary words onto the site's branding.)
+The shared OG route completes 4.6b, built as `/api/og/[kind]/[id]`: it takes an id and derives every string from the database, because `/api/og?title=...` is one line shorter and hands anyone an endpoint for stamping arbitrary words onto the site's branding, which cannot be withdrawn once permalink URLs circulate. 5.1 extends it by adding a `kind`, not a caller.
+
+Two things the route forced. Fonts are vendored as woff under `app/api/og/_fonts/` (53KB, latin subset): satori parses ttf, otf and woff but not woff2, and `next/font/google` never exposes a binary. Both faces were verified offline to produce distinct real glyph outlines rather than silently falling back, which is the failure that would otherwise only show up as an ugly card in someone else's feed. And `metadataBase` was missing from the root layout, so relative card URLs would have been dropped by every crawler; it now derives from `NEXT_PUBLIC_SITE_URL`, then Vercel's production host, then localhost.
+
+Card headline selection lives in `lib/earnings-card.ts` rather than the route, so the rule that a table row never becomes a card quote is unit tested. A card travels into other people's feeds with no page around it, so the 4.6a mistake would have been worse there than it was on the page.)
 
 ### 4.7 Backfill
 

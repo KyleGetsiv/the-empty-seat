@@ -39,9 +39,31 @@ export async function generateMetadata({ params }: Props) {
           event.eventDate
         )}. ${PRESENCE_COPY[event.presence]}`;
 
+  // The card is addressed by slug, never by text: see app/api/og. Relative
+  // URLs resolve against metadataBase in the root layout.
+  const ogImage = {
+    url: `/api/og/earnings/${slug}`,
+    width: 1200,
+    height: 630,
+    alt: title,
+  };
+
   return {
     title: `${title} | The Empty Seat`,
     description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: `/earnings/${slug}`,
+      images: [ogImage],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 
