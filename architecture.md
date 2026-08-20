@@ -11,9 +11,9 @@ rule: under 500 lines; consolidate past that.
 
 ## Last updated
 
-Module: 1.2.c (state fill, marker encoding)
-Date: 2026-08-19
-Commit: coverage map marker hierarchy and legend
+Module: 4.6a (public earnings section)
+Date: 2026-08-20
+Commit: 4.6a work
 
 ---
 
@@ -69,8 +69,10 @@ mutations.
 | /milestones, /milestones/[id] | listing with tag chips; detail with source and annotation (404 for drafts) | milestones, sources |
 | /methodology, /methodology/sources | methodology_body markdown; auto-generated source list by publisher | site_content, sources |
 | /landscape | intro, OperatorTable, SupervisionStrip, regulatory section (CpucComparisonChart + Tesla sidebar), US OperatorMap, China/export + world map, methodology | operator_programs, roles, competitor_snapshots, ride_estimates, cities, site_content |
+| /earnings (4.6a) | intro, derived corpus strip, EventCards grouped by fiscal period (newest first), extraction methodology section | earnings_events, approved waymo_mentions, site_content |
+| /earnings/[slug] (4.6a) | permalink: statements and table figures under separate headings, provenance block (source, model, chunks, review state). generateStaticParams over every event; 404 on unknown or colliding slug | earnings_events, approved waymo_mentions |
 
-Not yet built: /unit-economics, /financials, /earnings, /safety, /outlook.
+Not yet built: /unit-economics, /financials, /safety, /outlook.
 
 ### Admin routes
 
@@ -79,7 +81,9 @@ public); the auth gate is `app/admin/(protected)/layout.tsx` (session
 check, redirect to login). All mutations use `supabaseAdmin` and
 revalidate "/" at minimum (2.6); milestones also /milestones; sources
 /methodology/sources; site-content /methodology(/sources); programs and
-snapshots /landscape.
+snapshots /landscape; earnings review /earnings plus
+`revalidatePath("/earnings/[slug]", "page")`, since a literal path does not
+cascade to a child dynamic route (4.6a).
 
 | path | purpose |
 |------|---------|
@@ -102,8 +106,10 @@ snapshots /landscape.
 
 - **PageShell:** async server component; sticky nav and footer with
   "Last updated" from `getGlobalLastUpdated()`. Nav links only routes
-  that exist (Thesis, Trajectory, Operations, Milestones, Landscape;
-  Methodology as meta-link); planned sections are added as they ship.
+  that exist (Thesis, Trajectory, Operations, Milestones, Landscape,
+  Earnings; Methodology as meta-link); planned sections are added as they
+  ship. Mobile renders the same list, horizontally scrollable: the old
+  `slice(0, 4)` silently hid whichever section shipped last (4.6a).
 - **ThesisHero:** hero with animated ride count (ThesisHeroCounter,
   client, Framer Motion). Prefers `getLatestDisclosedWeeklyRides()` over
   CPUC; caption reflects which. Serif pending state when both null.
@@ -173,6 +179,21 @@ snapshots /landscape.
   'world' (naturalEarth for world). US frame also draws the state presence
   fill, gated on program supervision; world frame does not. Client wrapper
   renders the program and state legends.
+
+### components/earnings/ (4.6a)
+
+- **EventCard:** one source document on the timeline. With approved mentions:
+  period, type, date, the statements-and-figures mix, two previews, permalink
+  and source links, plus "review in progress" until the event settles to
+  `reviewed`. Silent: a thin muted row carrying its `presence` sentence.
+- **MentionQuote:** one approved quote that is genuinely prose. Serif
+  blockquote, speaker as `<cite>`, mention-type chip, and a figure chip
+  reading "(published)" in accent when the mention promoted. `compact` for the
+  timeline, full for the permalink.
+- **TableReading:** a quote that is a row from a financial table. Leads with
+  the figure from `extracted_metric`, identifies it by the table's own section
+  and row labels, demotes the row as filed to an audit line. Never a
+  blockquote. **Mention:** dispatches on `isTableReading()`.
 
 ### components/milestones/
 
@@ -254,6 +275,22 @@ snapshots /landscape.
   `getNextUnreviewedEventId(excludeId?)` (oldest event still pending).
   **earnings-promote.ts (fix(4.5), server):** `decidePromotion()` (pure,
   tested), `promoteMetric()`, `withdrawPromotion()`.
+- **earnings-table.ts (4.6a, client-safe):** reads back the
+  `annotateTableRows` prefix. `parseTableReading()` returns columns, section,
+  row label, and regrouped cells, or null for prose; plus
+  `partitionMentions()` and `describeMentionMix()`. Tests:
+  `scripts/test-earnings-table.ts` (12), pinned to real Q2 2026 10-Q rows.
+- **earnings-slug.ts (4.6a, client-safe):** `eventSlug()` over (company slug,
+  fiscal_period, event_type), `findBySlug()` (returns collisions rather than
+  picking one), and period grouping (`periodGroupKey` maps `FY 2025` to the
+  `Q4 2025` group, `periodSortValue`, `periodGroupLabel`).
+  **earnings-types.ts (4.6a, client-safe):** `PublicMention`,
+  `PublicEarningsEvent`, `EventPresence`, `presenceFor()`, `PRESENCE_COPY`;
+  same split as landscape / landscape-types. **earnings-public.ts (4.6a,
+  server):** `getEarningsTimeline()`, `getEarningsEventIndex()`,
+  `getEarningsEventById()`, `getEarningsEventBySlug()`, `summarizeCorpus()`.
+  Whole corpus in two queries, `cache()`d so metadata and body share one read.
+  Tests: `scripts/test-earnings-slug.ts` (12).
 - **disclosed-metrics.ts:** reads `disclosed_metrics`.
   `getLatestDisclosedWeeklyRides()` = latest COMPANY row with source
   (hero, KeyStats; null falls back to CPUC); `getDisclosedSeries(metric)`
@@ -263,7 +300,8 @@ snapshots /landscape.
   `getLandscapeCities()` and `getWaymoCitiesForMap()` feed the map;
   `getCpucComparison()` builds deployment-vs-pilot series (3.4).
 - **supabase/:** server.ts (session client), admin.ts (service role,
-  server-only), browser.ts (anon), types.ts (generated, hand-patched for
+  server-only), browser.ts (anon), public.ts (4.6a: anon, cookieless, for
+  public ISR reads), types.ts (generated, hand-patched for
   0006 through 0013; regenerate with `supabase gen types typescript`).
 
 ### External integrations
@@ -325,6 +363,33 @@ snapshots /landscape.
   undisclosed markets the largest marks on the map (a fixed 8px pin against
   Phoenix's 3.9px at z4); absence is now the missing polygon. Any color or
   size channel on a map needs a legend row, or readers infer one.
+- **Public reads use the cookieless anon client (4.6a):** `/earnings` reads
+  through `lib/supabase/public.ts`. server.ts reads cookies, so an admin
+  browsing a public page is authenticated against RLS and sees rows the public
+  cannot, here unapproved LLM output rendering as published; it also opts the
+  route out of static rendering. Mention queries filter `review_status` too,
+  so leaking takes removing two guards.
+- **An empty event states which empty it is (4.6a):** anon sees every
+  `earnings_events` row whatever its `processing_status`, and the daily EDGAR
+  action means an unreviewed filing usually exists. `presenceFor` separates
+  awaiting review, no Waymo passages (`extraction_chunks = 0`), and reviewed
+  with nothing approved. Rendering them alike would claim Alphabet was silent
+  when nobody had looked: the 16 green CPUC no-ops again.
+- **A table row is not a quotation (4.6a):** `annotateTableRows` prefixes
+  rows with caption, headers, and section so the model can read bare numbers,
+  and `verifyQuote` matches that prefixed text, so `quote_text` rightly stores
+  scaffolding Alphabet never wrote. Published as a quote it read "[Three
+  Months Ended Six Months Ended | Revenues:] Other Bets 373 382 823 793" in a
+  blockquote. Public surfaces classify first: prose is quoted, table rows are
+  readings led by the figure already in `extracted_metric`, row kept as an
+  audit line. Stored quotes are never rewritten to read better, since a
+  smoothed quote is indistinguishable from an invented one; the review queue
+  keeps `quote_text` read-only for the same reason.
+- **Permalink slugs are generated and matched, never parsed (4.6a):** derived
+  from (company slug, fiscal_period, event_type), no column and no migration.
+  Resolution generates slugs for every event and compares: parsing is
+  ambiguous (`pony-ai` + `q1-2026` + `earnings-call` has no unique split) and
+  generating detects collisions instead of picking one at random.
 - **Extraction drop log (4.5):** every run writes
   `scraped-raw/extraction-logs/{event_id}/v{version}.json`, one entry per
   discarded quote (reason, chunk, locator), written even when nothing was
@@ -357,11 +422,25 @@ snapshots /landscape.
   produces a log, but the model is not deterministic and may drop a
   different set. Source-viewer passage ids are re-derived by the current
   parser, so a text.ts change can shift them out of step with old locators.
+- Other public routes still read through `createSupabaseServerClient()`, so
+  an admin sees draft milestones on `/milestones`: the bug 4.6a fixed, lower
+  stakes. Moving them to `supabase/public.ts` is a small follow-up.
+- Permalink identity rests on (filer, fiscal_period, event_type) being
+  unique: true for the corpus, but unconstrained. A 10-K/A or second
+  item-2.02 8-K in a quarter collides; the page 404s and logs.
+- 4.6b outstanding: metrics-evolution view, verbatim search (client filter
+  over the payload `/earnings` ships), shared `/api/og`. Permalinks have
+  title and description but no OG image.
+- No extracted-mention total on `earnings_events` (only `extraction_chunks`
+  and `mentions_dropped`), and anon sees approved mentions only, so the page
+  cannot tell "extracted several, approved none" from "extracted none".
+  `PRESENCE_COPY.no_approved_mentions` is true either way; a
+  `mentions_extracted` column would let it say which. Belongs with 4.12.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
   built; `service_area_geojson` unused. `audit_trigger_fn` hard-coded to
   `NEW.id`; non-UUID PK tables excluded.
-- Planned routes not yet built: /financials, /earnings, /safety,
-  /outlook, /unit-economics. Pre-2025 CPUC baseline and CPUC
+- Planned routes not yet built: /financials, /safety, /outlook,
+  /unit-economics. Pre-2025 CPUC baseline and CPUC
   incident_metrics not ingested (later phases).
 
 ---
@@ -382,7 +461,8 @@ inside each, and repeating them here is what pushed this file over budget.
 app/
   page.tsx, layout.tsx, globals.css   landing composition, root layout, @theme
   (public)/                  layout.tsx wraps in PageShell; milestones/,
-                             methodology/, landscape/, earnings/ (4.6)
+                             methodology/, landscape/, earnings/ (4.6a:
+                             page.tsx timeline, [slug]/ permalink)
   admin/                     layout.tsx passthrough; login/; (protected)/
                              auth-gate layout + one dir per CRUD table,
                              plus earnings/ (list, [id] review queue,
@@ -390,17 +470,18 @@ app/
   api/cron/scraper-health/   daily CPUC freshness report
 
 components/                  sections/, charts/, ui/, operations/,
-                             milestones/, landscape/, admin/
+                             milestones/, landscape/, admin/, earnings/
 
 lib/
   cohorts, state-tiers (client-safe), state-fill-layer, disclosed-metrics,
   site-content, notify, last-updated,
   cpuc-calendar, landscape (server), landscape-types (client-safe),
-  earnings-review (server), earnings-promote (server),
-  earnings-mentions (client-safe)
+  earnings-review, earnings-promote, earnings-public (server),
+  earnings-mentions, earnings-slug, earnings-types, earnings-table
+  (client-safe)
   glossary/, milestones/tags, scrapers/{cpuc,cpuc-xlsx,sec-edgar,transcripts}
   extraction/{schema,text,extract,drop-log,run}
-  supabase/                  server, admin, browser, types
+  supabase/                  server, admin, browser, public, types
 
 public/                      us-states.json (51 features, ~66KB, also the
                              fixture for test-state-tiers)

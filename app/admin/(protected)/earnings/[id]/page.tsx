@@ -46,6 +46,12 @@ async function settleEventStatus(eventId: string) {
 function revalidateAll(eventId: string) {
   revalidatePath("/");
   revalidatePath("/earnings");
+  // revalidatePath on a literal path does not cascade to a child dynamic
+  // route, so the timeline alone would refresh while every /earnings/[slug]
+  // permalink served the pre-approval version for up to an hour (4.6a).
+  // Passing the route pattern with type "page" revalidates all of them, which
+  // is cheaper to reason about than deriving this event's slug here.
+  revalidatePath("/earnings/[slug]", "page");
   revalidatePath(`/admin/earnings/${eventId}`);
   revalidatePath("/admin/earnings");
 }

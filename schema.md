@@ -90,6 +90,19 @@ extraction passage id (resolvable in the source viewer), and
 sees events and APPROVED mentions only. The v1 extracted_metrics table
 is dropped; disclosed_metrics is the metrics store.
 
+Two gotchas the public pages depend on (4.6a). First, anon sees EVERY
+`earnings_events` row, `pending` and `failed` included, and only the
+mentions are filtered; a public surface must therefore read
+`processing_status` before saying anything about what a document
+contains. `extraction_chunks = 0` is the separate, stronger fact that
+the document holds no Waymo or Other Bets passage at all. Second,
+`(company_id, fiscal_period, event_type)` is the public permalink
+identity but carries no unique constraint: it holds for Alphabet, which
+files one 8-K and one periodic report per quarter, and would break on an
+amended filing or a second item-2.02 8-K. Add the constraint only
+alongside a decision about what an amendment should do to an existing
+permalink.
+
 #### site_content
 Key/value store for admin-editable editorial copy, `key` is a text pk.
 No audit trigger (text pk; see CLAUDE.md audit trigger limitation).

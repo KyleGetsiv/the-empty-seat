@@ -32,8 +32,11 @@ context.
 - [ ] **Placeholder copy sweep.** Every `// TODO: user to replace`
   block and every seeded `site_content` key (thesis_paragraphs,
   methodology_body, landscape_intro, landscape_china,
-  landscape_regulatory, landscape_methodology) reviewed and finalized
-  via `/admin/site-content`. Added 3.5.
+  landscape_regulatory, landscape_methodology, earnings_intro,
+  earnings_methodology) reviewed and finalized via
+  `/admin/site-content`. Added 3.5; earnings keys added 4.6a, and
+  neither row exists yet, so both pages currently render their inline
+  fallback copy.
 - [ ] **Competitor snapshot freshness.** Every `competitor_snapshots`
   row less than one quarter old at launch; Apollo Go and Pony.ai refreshed
   after their 2026-08-18 Q2 earnings. Added 3.5.

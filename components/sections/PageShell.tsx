@@ -13,6 +13,7 @@ const navLinks = [
   { label: "Operations", href: "/#operations" },
   { label: "Milestones", href: "/#milestones" },
   { label: "Landscape", href: "/landscape" },
+  { label: "Earnings", href: "/earnings" },
 ];
 
 interface PageShellProps {
@@ -54,12 +55,13 @@ export async function PageShell({ children }: PageShellProps) {
                 Methodology
               </a>
             </nav>
-            {/* Mobile: abbreviated */}
+            {/* Mobile: same links, horizontally scrollable. Slicing to the
+                first four silently hid whichever section shipped last. */}
             <nav
               aria-label="Mobile navigation"
               className="lg:hidden flex items-center gap-4 overflow-x-auto text-sm"
             >
-              {navLinks.slice(0, 4).map((link) => (
+              {navLinks.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}

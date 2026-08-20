@@ -190,6 +190,46 @@ export const glossary: Record<string, GlossaryEntry> = {
       "Issued in 2021 and amended since, the Standing General Order creates the only national, cross-operator crash dataset for automated vehicles. It covers Waymo, Zoox, Tesla, and others, and is the basis for comparative safety analysis in a later phase of this site. Reporting thresholds and redactions limit what can be concluded from it.",
     seeAlso: ["disclosure_quality"],
   },
+  form_10k: {
+    term: "10-K (Annual Report)",
+    shortDefinition:
+      "A company's audited annual report to the SEC. The most complete and legally exposed description of a business it publishes each year.",
+    longDefinition:
+      "Alphabet's 10-K carries the segment tables that put a revenue and operating-loss figure on Other Bets, and the risk factors where autonomous driving is described in the company's own careful language. It is filed a few days after the fourth-quarter earnings release and covers the full fiscal year, which is why this site labels it FY rather than Q4.",
+    seeAlso: ["other_bets", "form_8k"],
+  },
+  form_10q: {
+    term: "10-Q (Quarterly Report)",
+    shortDefinition:
+      "A company's unaudited quarterly report to the SEC, filed for the first three quarters of each fiscal year.",
+    longDefinition:
+      "Shorter and less examined than the 10-K, but filed under the same liability. Waymo appears in it rarely and briefly, usually inside the Other Bets segment discussion rather than by name.",
+    seeAlso: ["form_10k", "other_bets"],
+  },
+  form_8k: {
+    term: "8-K (Earnings Release)",
+    shortDefinition:
+      "A filing announcing a material event. The subset this site tracks is Item 2.02, the quarterly earnings release.",
+    longDefinition:
+      "Alphabet files many 8-Ks for governance matters; only those including Item 2.02 (Results of Operations) are earnings releases, and only those are ingested here. The numbers live in the EX-99.1 press-release exhibit attached to the filing rather than in the filing's own body, so both are stored.",
+    seeAlso: ["form_10k", "other_bets"],
+  },
+  fiscal_period: {
+    term: "Fiscal Period",
+    shortDefinition:
+      "The quarter or year a document reports on, which is not the date it was filed.",
+    longDefinition:
+      "Alphabet's fiscal year is the calendar year. A quarterly report is labeled by the quarter it covers; an earnings release is labeled by the completed quarter it reports, not the month it is issued; an annual report is labeled FY because it reports the full year alongside the fourth quarter. On this site the label is derived from the filing's own report date, never entered by hand.",
+    seeAlso: ["form_10k", "form_8k"],
+  },
+  verbatim_verification: {
+    term: "Verbatim Verification",
+    shortDefinition:
+      "Matching every quote character by character against the stored source document before it is saved, and discarding anything that does not appear there.",
+    longDefinition:
+      "A language model asked to quote a document will sometimes return a fluent sentence that the document does not contain. Rather than trusting or correcting such output, this site checks each returned quote against the exact passage it cites, normalizing only curly quotes and dash characters, and discards any quote that fails, logging it with the reason. A quote that cannot be found verbatim is by definition not a quote. Verification happens before human review, so a reviewer never sees invented text.",
+    seeAlso: ["disclosure_quality"],
+  },
 };
 
 export type GlossaryKey = keyof typeof glossary;
