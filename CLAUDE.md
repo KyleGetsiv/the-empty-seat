@@ -4,7 +4,7 @@ Project memory for Claude Code. Read this at the start of every session, before 
 
 ## Project
 
-**The Empty Seat** is a research-grade website tracking autonomous vehicle deployment, Waymo-deep with a competitive landscape around it, targeting growth investors and AV operators. The build specification is `dev-plan.md` (v2, adopted August 2026); the living repo snapshot is `architecture.md`. Read all three at session start.
+**The Empty Seat** is a research-grade website tracking autonomous vehicle deployment, Waymo-deep with a competitive landscape around it, targeting growth investors and AV operators. The build specification is `dev-plan.md` (v2, adopted August 2026); the living repo snapshot is `architecture.md`, with per-table schema detail in `schema.md`. Read all four at session start.
 
 The tone is editorial research, not product marketing. Think "essay you can live inside" rather than "dashboard." Restrained typography, generous whitespace, serif display headlines, narrative around every chart.
 
@@ -95,13 +95,29 @@ After browser verification passes and before proposing the commit:
        Date: <today's date YYYY-MM-DD>
        Commit: <module> work  (e.g. "1.3 work")
 
-  3. Confirm architecture.md stays under 500 lines (`wc -l
-     architecture.md`). `schema.md` has no ceiling; it exists so
-     per-table detail can grow without squeezing the snapshot.
-     Note: wc -l counts blank lines, so practical content is closer to
-     380 lines of text. If the file is at or above 480 lines, stop and
-     surface before committing so we can consolidate together rather
-     than silently going over.
+  3. Accuracy pass. Pick one section you did NOT touch this module
+     and check it against the actual repo: does every route listed
+     still exist, does every component still live where it says, is
+     every "Known gaps" item still open, did anything get renamed?
+     Fix what has drifted and say what you fixed. Rotate the section
+     across modules so the whole file gets audited over a phase.
+     This is the point of the exercise: a stale architecture.md is
+     worse than a long one, because CLAUDE.md tells every session to
+     trust its "Known gaps" ledger over its own memory.
+
+     Size is a signal, not a rule. Past roughly 500 lines (`wc -l
+     architecture.md`), ask what has gone stale or what belongs in
+     dev-plan.md instead, NOT which explanation to delete. When
+     something genuinely has to go, cut facts before reasons: a route
+     table or component list can be rebuilt from the filesystem in a
+     minute, while the reason a decision was made cannot be rebuilt at
+     all, and losing it is how a fixed bug gets reintroduced by
+     someone tidying for consistency. `schema.md` has no ceiling.
+
+     (Replaced a hard 500-line ceiling in 4.6a. It was optimizing the
+     wrong variable: under it, the first thing cut was always
+     rationale, because rationale is the most compressible content in
+     the file and facts are already terse.)
 
   4. Stage architecture.md alongside all other module files in the
      same commit. Do not make a separate commit for the architecture
@@ -117,7 +133,7 @@ After browser verification passes and before proposing the commit:
 
 ## Session start
 
-1. Read this file, then `architecture.md` (what exists), then `dev-plan.md` (what's next).
+1. Read this file, then `architecture.md` (what exists) and `schema.md` (per-table detail), then `dev-plan.md` (what's next). Any doc split out of `architecture.md` gets added to this list in the same commit that splits it; `schema.md` was split in `6539c73` and went unlisted until 4.6a, so sessions had to be told about it by hand.
 2. Work the next unfinished module of the current phase, one module at a time, per the working agreement.
 3. `architecture.md`'s "Known gaps and debt" section is the authoritative status ledger; do not trust memory of prior sessions over it.
 

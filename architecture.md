@@ -4,8 +4,12 @@ Living state of the codebase, refreshed at the end of every module that
 changes schema, routes, components, conventions, integrations, or debt.
 Read this at the start of every planning conversation. Not the plan
 (dev-plan.md), not the working agreement (CLAUDE.md): it answers "what
-currently exists." Per-table schema detail lives in `schema.md`. Hard
-rule: under 500 lines; consolidate past that.
+currently exists." Per-table schema detail lives in `schema.md`.
+
+Accuracy beats brevity here. Past roughly 500 lines, ask what has gone
+stale, not which explanation to delete: cut facts before reasons, since
+a component list is re-derivable from the repo and a rationale is not.
+See the architecture maintenance block in CLAUDE.md.
 
 ---
 
@@ -408,7 +412,8 @@ cascade to a child dynamic route (4.6a).
 **Structural debt:**
 - PENDING USER: regenerate lib/supabase/types.ts (hand-patched 0006 to
   0013); magic-link prod click-through not re-verified since 1.6;
-  Baidu/Pony Q2 snapshot refresh after 2026-08-18 earnings; no
+  Baidu/Pony Q2 snapshot refresh, OVERDUE since their 2026-08-18
+  earnings; no
   GITHUB_DISPATCH_TOKEN, so reprocess stays disabled. 4.5 promotions were
   spot-checked and corrected 2026-08-19; city date corrections from the
   same pass are in pre-launch.md.
@@ -462,7 +467,9 @@ app/
   page.tsx, layout.tsx, globals.css   landing composition, root layout, @theme
   (public)/                  layout.tsx wraps in PageShell; milestones/,
                              methodology/, landscape/, earnings/ (4.6a:
-                             page.tsx timeline, [slug]/ permalink)
+                             page.tsx timeline, [slug]/ permalink).
+                             financials/, outlook/, safety/ exist but are
+                             EMPTY placeholder dirs, no page.tsx yet
   admin/                     layout.tsx passthrough; login/; (protected)/
                              auth-gate layout + one dir per CRUD table,
                              plus earnings/ (list, [id] review queue,
