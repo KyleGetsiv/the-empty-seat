@@ -1,516 +1,421 @@
-# The Empty Seat: Development Plan v2
+# The Empty Seat: Development Plan v3
 
-Revised 2026-08-15. Supersedes the v1 plan (preserved in git history; last v1 revision was commit 52adb78).
+Revised 2026-09-20. Supersedes v2 (adopted 2026-08-15; last v2 revision is the commit before this one). v1 remains in git history at `52adb78`.
 
 ## Purpose of this document
 
-This is the build specification for resuming The Empty Seat after a hiatus (last commit 2026-05-03). It is the source of truth for scope, sequencing, and acceptance criteria going forward. Phases 0 and 1 of the v1 plan are complete and shipped to Vercel (unannounced, behind the noindex gate); `architecture.md` is the accurate snapshot of what exists. If something here is ambiguous, surface the question rather than guessing.
+This is the build specification: scope, sequencing, and acceptance criteria for work that is not yet done. It is one of five documents, each with one job:
 
-Unlike v1, this is not a greenfield spec. Read `CLAUDE.md` and `architecture.md` before any module.
+| File | Answers |
+|---|---|
+| `CLAUDE.md` | How we work: stack, working agreement, rules |
+| `architecture.md` | What exists right now, and the authoritative debt ledger |
+| `schema.md` | What each table means and its gotchas |
+| `dev-plan.md` (this file) | What gets built next, and in what order |
+| `build-log.md` | How each finished module got built, and why it looks the way it does |
 
-## What changed since v1 (project decisions, August 2026)
+v2 mixed the last two. Finished modules carried long "(Built ...)" narratives while the unbuilt financial modules were three sentences each, pointing at v1 text that lives only in git history. v3 moves every build narrative to `build-log.md` verbatim (reasons are not re-derivable, so none are cut) and writes the open modules out in full. No open module in this document depends on text in git history.
 
-Three decisions reshape the plan:
+If something here is ambiguous, surface the question rather than guessing.
 
-1. **Scope broadens to the AV landscape, Waymo stays the flagship.** v1 was strictly Waymo-only on the public surface. Since then Zoox has begun charging the public for rides (Las Vegas, August 10, 2026, the first paid robotaxi service in the US besides Waymo), Tesla operates in seven metros (with heavy caveats), and the Chinese operators are scaling internationally. The site keeps its Waymo depth and adds a strong competitive landscape section: the "Waymo deep + landscape page" structure. No per-competitor deep pages, no company switcher.
+## What changed since v2 (decisions, September 2026)
 
-2. **The announce bar is defined.** The site is deployed but unannounced. It goes public when three things are true: (a) nothing on the site is visibly stale, (b) the financials section with the implied Waymo P&L exists, (c) multi-operator coverage exists so the site matches its "AV deployment tracking" framing. Unit economics, safety, and outlook move post-announce.
-
-3. **Automation is prioritized.** The owner works at an opportunistic pace with gaps between sessions. The failure mode observed in the May-August hiatus is data staleness, not missing features. Scrapers and the extraction pipeline are therefore load-bearing infrastructure, not conveniences: anything that must stay fresh quarterly should refresh itself and flag failures in Slack.
+1. **The site gets subscribers and a recurring dispatch.** Visitors can subscribe by email. A monthly AI-assembled dispatch covers new markets, new data, earnings, vehicles, regulatory and safety developments, and what to watch next. It is a data dispatch, deliberately unlike an essay: every figure is templated from the database and the model writes only connective prose. Issues are archived on the site at `/dispatch`.
+2. **One review gate, worked weekly.** A unified admin inbox becomes the single place the owner approves new facts, every Friday or Saturday. Approval publishes to the site and makes the item eligible for the next dispatch in the same action. There is no separate review for the email. Regulatory data parsed by code does not wait for review.
+3. **A news monitor feeds the inbox.** A model-assisted monitor reads a fixed list of first-party sources (operator newsrooms, IR pages, regulators) and drafts proposed changes. It reuses the 4.4 extraction machinery. The `waymo.com` roster scraper (v2 module 4.11) becomes its first source.
+4. **The milestones feed becomes industry-wide.** Competitor milestones are first-class, shown with a company chip.
+5. **Substack was considered and rejected** as dispatch infrastructure: no publishing API as far as we know (re-verify if this is ever revisited), the archive and its search traffic would live off-site, and AI data dispatches would sit beside the owner's personal essays. The site owns the dispatch; Alpha Work stays the opinion layer; each links to the other.
+6. **Stack additions approved:** Resend (transactional and dispatch email) and Vercel Web Analytics. `CLAUDE.md` is amended in the same commit as this plan.
+7. **Phases renumbered.** Two new phases (The Desk, Dispatch) land before Launch. No commits were ever made against v2 phases 5 through 8, so `feat(5.1)` and later prefixes carry no collision.
 
 ## Audience and positioning
 
-Unchanged in substance from v1:
+Unchanged from v2:
 
 1. **Growth and crossover investors** evaluating Waymo (directly via secondaries, or via Alphabet) who want unit economics, implied P&L, valuation framework, and competitive positioning with primary sources linked.
-2. **Operators and strategists at AV companies** benchmarking against Waymo. The landscape section now serves this segment directly rather than incidentally.
+2. **Operators and strategists at AV companies** benchmarking against Waymo.
 
-Positioning line, updated: The Empty Seat is Waymo research first, with the competitive field tracked at disclosed-data fidelity around it. Robotaxi Tracker and The Charge Port are the commodity live-dashboard layer; The Empty Seat is the research layer: sourced, editorial, and opinionated about what the numbers mean.
+Positioning: The Empty Seat is Waymo research first, with the competitive field tracked at disclosed-data fidelity around it. Robotaxi Tracker and The Charge Port are the commodity live-dashboard layer; The Empty Seat is the research layer: sourced, editorial, and opinionated about what the numbers mean. The dispatch extends that: a sourced monthly record of what changed, where every line links to the row and the source behind it.
 
 ## Guiding principles
 
-Principles 1 through 6 and 8 carry over from v1 verbatim (research over dashboard; primary sources always linked; tooltips everywhere; static where possible; ship vertical slices; admin UX matters; disclosed sources, not community-tracked). Principle 7 is amended:
+Principles 1 through 9 carry over from v2 (research over dashboard; primary sources always linked; tooltips everywhere; static where possible; ship vertical slices; admin UX matters; multi-company data with a Waymo-deep frontend; disclosed sources, not community-tracked; confidence labeling is non-negotiable in comparative contexts). Two are added:
 
-7. **Multi-company data, Waymo-deep frontend.** Every data table keeps its `company_id` foreign key. Waymo remains the only company with full-site depth. Competitors appear in the landscape section and in explicitly comparative modules. Do not build per-company deep pages or a company switcher UI. Landscape components should render gracefully when a competitor discloses almost nothing, because most disclose almost nothing; sparse data handling is a first-class design requirement, not an edge case.
-
-One principle is added:
-
-9. **Confidence labeling is non-negotiable in comparative contexts.** Waymo's CPUC numbers, Zoox's CPUC pilot filings, Baidu's earnings disclosures, and Tesla's marketing claims are not the same kind of fact. Every comparative figure carries its confidence level and source type visibly, not just in a tooltip. The site's edge is that it does not launder low-quality numbers into tables next to high-quality ones.
+10. **One gate.** A fact is reviewed once. Approval publishes it to the site and queues it for the dispatch. A live table holds only approved facts: if a row is in `cities` or `disclosed_metrics`, it is public and it is true to the best of the owner's review. Unreviewed material lives in a staging table, never in a live table behind a flag.
+11. **Generated prose states only reviewed facts.** The dispatch generator receives a structured payload of approved changes and may not introduce a number, name, or date that is absent from it. This is enforced by a check, the same way `verifyQuote` enforces verbatim quotes, and an issue that fails the check does not reach the send button.
 
 ## Tech stack
 
-Unchanged from v1 and from `CLAUDE.md` (Next.js 16 App Router with `proxy.ts`, TypeScript, Tailwind v4 via `@theme` in `globals.css`, Recharts, Framer Motion, Vercel, Supabase, Vercel Cron plus GitHub Actions, Mapbox GL JS, Radix UI, Slack webhook monitoring). Do not substitute without asking.
+Unchanged from `CLAUDE.md`, plus: **Resend** for email (double opt-in, dispatch sends, delivery webhooks) and **Vercel Web Analytics** for page analytics. Extraction and generation model: `claude-sonnet-5`, recorded on every generated row. Do not substitute without asking.
 
-Extraction model decided 2026-08-15 at Phase 4 start: `claude-sonnet-5` (Sonnet 5, $2/$10 per MTok; roughly $1-2 per quarter of Alphabet documents, ~$10 for the 8-quarter backfill). CLAUDE.md updated.
+## Phase map
 
-## Phase map: v1 to v2
-
-| v2 phase | Content | v1 origin | Ships publicly |
+| v3 phase | Content | v2 origin | Status |
 |---|---|---|---|
-| 0, 1 | Foundation; Thesis and Operations | v1 Phases 0, 1 | Done (deployed, unannounced) |
-| 2 | Re-entry and freshness | New | Built 2026-08-15 (deploy; still unannounced) |
-| 3 | Competitive landscape | v1 Phase 5, expanded | Built 2026-08-15 (deploy; still unannounced) |
-| 4 | Financials and the extraction engine | v1 Phases 3 and 4, merged and resequenced | Yes (deploy; still unannounced) |
-| 5 | Launch | v1 Phase 8 subset plus `pre-launch.md` | The announcement |
-| 6 | Unit economics | v1 Phase 2 | Post-announce |
-| 7 | Safety | v1 Phase 6 | Post-announce |
-| 8 | Outlook, polish, distribution | v1 Phases 7 and 8 remainder | Post-announce |
+| 0, 1 | Foundation; Thesis and Operations | same | Done |
+| 2 | Re-entry and freshness | same | Done 2026-08-15 |
+| 3 | Competitive landscape | same | Done 2026-08-15 |
+| 4 | Financials and the extraction engine | same | 4.1 to 4.7 and 4.12 done; 4.8, 4.9, 4.10, 4.13, 4.14 open |
+| 5 | The Desk: review inbox and news monitor | new (absorbs v2 4.11) | Open |
+| 6 | Dispatch: subscribers, generator, archive, analytics | new (absorbs v1 8.3 email capture, pulls v2 5.2 domain forward) | Open |
+| 7 | Launch | v2 Phase 5 | Open |
+| 8 | Unit economics | v2 Phase 6 | Post-announce |
+| 9 | Safety | v2 Phase 7 | Post-announce |
+| 10 | Outlook, valuation, polish | v2 Phase 8 | Post-announce |
 
-v1 Phases 2 through 8 as originally written are superseded by this document. Where a v2 module says "as specified in v1", the v1 text (in git history) remains the reference for that module's detail.
-
-Commit prefix convention continues: `feat(2.1)`, `fix(3.2)`, etc., referring to v2 phase numbers. No commits were ever made against v1 phases 2+, so there is no numbering collision.
-
----
-
-## State of the world briefing (August 2026)
-
-Research summary compiled 2026-08-15 from primary and secondary sources. This section exists so modules below can reference verified facts, and so data entry in Phases 2 and 3 starts from sourced values rather than memory. Every item here should still be re-verified against its primary source at data-entry time; items flagged UNVERIFIED must not enter the database without confirmation.
-
-### Waymo
-
-- Weekly paid rides: 500,000+, first disclosed ~2026-03-27, reaffirmed on the Alphabet Q1 call (2026-04-29) and again ~2026-07-08. No higher figure has been disclosed since; one analyst notes the figure has held flat across four disclosures while the city count grew, implying declining per-vehicle utilization (editorially interesting; see Phase 2.4). Target: 1M weekly rides by end of 2026.
-- Cumulative paid trips: 20M+ (Electrek, 2026-07-08; single source, treat as UNVERIFIED until corroborated). Rider-only miles: 220.6M through March 2026.
-- Fleet: ~3,500 to 4,000 vehicles (sources conflict; "close to 4,000" is the most recent, 2026-08-11).
-- Funding: $16B round at a $126B post-money valuation, led by Alphabet, announced 2026-02-02.
-- Cities serving riders (11): Phoenix, SF Bay Area, LA, Miami, Orlando, Dallas (all open access; Dallas waitlist dropped 2026-08-04), Austin and Atlanta (Uber app exclusive; exclusivity ends Jan 2028, announced 2026-07-24), Houston and San Antonio (waitlist), Nashville (public since 2026-04-07, in partnership with Lyft; open-vs-waitlist status UNVERIFIED).
-- Employee-only driverless operations, public "soon" (announced 2026-07-08): Las Vegas, Denver, San Diego, Tampa.
-- Announced/testing: Washington DC (delayed, regulatory limbo), Detroit, Sacramento (CPUC approval 2026-08-14 along with San Diego and enlarged Bay Area and LA territories, 18 counties), plus a long announced list (Baltimore, Boston, Charlotte, Chicago, Minneapolis, New Orleans, New York, Philadelphia, Pittsburgh, Portland, Seattle, St. Louis). International: Tokyo (testing, not serving riders), London (testing since 2026-04-14, commercial targeted 2026).
-- Freeway service: launched Nov 2025 (Phoenix, SF, LA), suspended May 2026 after 13 construction-zone incidents, resumed 2026-07-29 starting with Phoenix. The June OTA fix was Waymo's sixth software recall (3,871 vehicles). Airports: SFO since 2026-01-29, Sky Harbor restored 2026-07-29.
-- Uber relationship: Phoenix pilot quietly ended May 2026; Austin/Atlanta exclusivity ends Jan 2028 with Waymo launching its own app there.
-- Open probes: NHTSA PE26001 and an NTSB school-bus probe (opened Jan 2026); current status UNVERIFIED.
-
-### CPUC (the site's primary Waymo data source)
-
-- Program active, two tracks (Deployment: Waymo; Pilot: Aurora, Tensor, Waymo, WeRide, Zoox). Most recent published quarter: Q1 2026. Q2 2026 reports were due 2026-08-01 and were not yet posted as of 2026-08-15; expect them imminently.
-- Note for Phase 3: Zoox files in the CPUC Pilot Program. That is a disclosed, primary source for Zoox California activity, the same class of source the site already trusts for Waymo.
-
-### Zoox (Amazon)
-
-- First paid service: Las Vegas, 2026-08-10, via Zoox app, no waitlist. Preceded by ~11 months of free public rides. Geofence includes the Strip, LVCC, Sphere, T-Mobile Arena, Harry Reid airport (sq mi UNVERIFIED).
-- SF: free rides, waitlist-gated (Explorers program), expanded footprint spring 2026. Paid service requires CPUC/DMV deployment permits Zoox does not yet hold. Austin: free rides operating. Miami, LA (Uber partnership, mid-2027), Dallas, Phoenix: announced/testing.
-- Regulatory: NHTSA exemption granted 2026-07-30 for the purpose-built vehicle (no steering wheel), capped at 2,500 vehicles/year for two years. Fourth recall July 2026 (105 vehicles, which roughly indicates purpose-built fleet size).
-- Ride volume: "350,000+ passengers" Las Vegas as of March 2026 (single source, UNVERIFIED).
-
-### Tesla
-
-- Operating in 7 metros: Austin, Dallas, Houston, Miami, Orlando, Tampa, SF Bay Area. The critical distinctions: the Bay Area service uses a safety driver in every car and legally is not an AV service at all (Tesla operates under a TCP charter permit; CPUC stated in March 2026 that the person in the car "is the driver"). Tesla holds no CPUC/DMV AV deployment permits and files no California AV data.
-- Scale reality check: active unsupervised fleet ~21 vehicles at end of Q2 2026 per Tesla's own chart data; ~2.4-2.5M cumulative paid miles (including supervised Bay Area); Q2 paid miles roughly flat vs Q1 and declining within the quarter. Musk claims 10% weekly growth; the chart contradicts it. 380K+ cumulative unsupervised miles claimed with "0 notable incidents."
-- Texas: driverless authorization under the new TxDMV framework 2026-05-28, 42 Model Ys registered (vs Waymo's 577 in Texas). Cybercab: volume production began Q2 2026, slow ramp, none in public service. Next markets named: Las Vegas, Phoenix, New Orleans. NHTSA investigation (opened June 2025) status UNVERIFIED.
-
-### China operators
-
-- Baidu Apollo Go: 3.2M fully driverless rides Q1 2026 (weekly peak 350K+ in March, i.e., comparable weekly volume to Waymo, at lower fares), 22M cumulative rides, 27 cities. Dubai commercial fully driverless since 2026-03-30 (with Uber and Apollo Go apps). Switzerland (AmiGo with PostBus, safety operators, June 2026), London road testing (2026-07-28), Hong Kong right-hand-drive trial, Abu Dhabi permit. RT6 vehicle cost ~$28,350. Wuhan mass outage 2026-03-31 (~100 vehicles frozen simultaneously) triggered a nationwide new-permit freeze April through late July 2026; permits resumed ~2026-07-23; Wuhan restarted with safety drivers. Q2 2026 earnings due 2026-08-18 (three days after this writing) and will show the freeze's impact.
-- Pony.ai: fleet 1,700+ (May 2026), target 3,500+ by end-2026; Q1 2026 robotaxi revenue +395% YoY (small base, ~$8M); claims city-level per-vehicle unit-economics breakeven in Guangzhou (Gen-7); fully driverless commercial in all four Chinese tier-1 cities; operating in Croatia (Zagreb, billed as Europe's first commercial robotaxi), Qatar, Singapore, South Korea; announced 2,000+ robotaxis across five European cities with Uber (2026-08-14). Claims vehicle cost 1/4 to 1/5 of Waymo's. Q2 earnings due 2026-08-18.
-- WeRide: Q2 2026 (reported 2026-08-12) revenue RMB 231.7M (+82% YoY), ~1,800 robotaxis domestic plus ~400 overseas, Middle East 200+; fully driverless commercial in Abu Dhabi (claims Abu Dhabi unit-economics breakeven after removing safety officers) and Dubai (via Uber, 2026-03-31); Riyadh with safety operators; committed with Uber to 1,200+ robotaxis across the Middle East; guidance: operating cash flow positive quarter in 2028, breakeven 2029.
-- Didi: 24/7 driverless trials Guangzhou/Beijing, R2 vehicle 2026, UAE pilot announced; no meaningful disclosures yet.
-- Market frame: Goldman ~500K robotaxis in China by 2030, ~$47B China market by 2035 (headline-level verification only).
-
-### Nuro + Lucid + Uber (elevated to first-class operator, decision 2026-08-15)
-
-- Structure: Nuro supplies the L4 Nuro Driver; Lucid supplies the Gravity SUV platform (later a sub-$50K "Midsize" platform); Uber owns and operates the fleet and runs the network. The only Uber AV program where Uber owns the vehicles. Uber has invested $500M in Lucid (~11.5% stake) and roughly $500M committed to Nuro (Reuters, milestone-based); vehicle commitment raised to at least 35,000 (10K Gravity + 25K Midsize) on 2026-04-14.
-- Status: ~100 Gravity engineering vehicles testing autonomously with safety operators in the SF Bay Area (since Dec 2025) and Houston (confirmed 2026-06-17). Uber employees hailing them via the Uber app since 2026-04-13. No public rides, no fares. Driverless testing not yet begun as of June reporting. Production Gravity units began shipping from Lucid's Arizona plant July 2026. Lucid (2026-08-04) and Uber (2026-08-05) both reiterated a late-2026 Bay Area launch; Houston mid-2027 with a 50K sq ft depot.
-- Regulatory: CA DMV driverless testing permit adds Gravity (April 2026; Santa Clara and San Mateo counties, up to 45 mph, NOT San Francisco proper); CPUC Drivered Pilot permit 2026-05-08 (passengers with safety driver, no fares); 47 vehicles registered in Texas. Will appear in CPUC Pilot Program quarterly filings from Q2 2026, joining Zoox in the site's regulatory comparison frame. Still needs CPUC driverless/deployment and DMV passenger deployment permits before charging fares.
-- Disclosed metrics: fleet ~100 (unchanged since March 2026); no miles or ride counts disclosed. Nuro: $203M Series E at $6B (Aug 2025), pivoted from delivery to licensing Sept 2024, co-CEOs Zhu and Ferguson.
-- What the sensor-halo Lucid SUVs seen around SF with a driver are: this engineering fleet, in autonomous mode with a safety operator, day and night.
-
-### Other US operators (for landscape completeness)
-
-- Avride: commercial in Dallas on Uber app since Dec 2025, safety operator onboard. May Mobility: driver-out low-speed service Atlanta metro; Arlington TX on Uber. Motional: supervised Las Vegas pilot on Uber, driverless targeted end-2026. Cruise: still dead (shut down Dec 2024). Uber is the common rail for nearly every non-Waymo operator (30+ AV partnerships, AV live in 7 cities, 15 targeted by end-2026, "hundreds of thousands" of AV trips per week per the Q2 2026 call); Lyft has Waymo (Nashville) and Freenow/Baidu in Europe.
-
-### Alphabet financials (for Phase 4)
-
-- Q1 2026 (reported 2026-04-29): Other Bets revenue $411M (down YoY from $450M), operating loss $2.1B (widened from $1.22B). Pichai confirmed 500K+ weekly Waymo rides on the call.
-- Q2 2026 (reported 2026-07-22): Other Bets revenue $382M (vs $373M), operating loss $1.8B (vs $1.24B). Waymo commentary on the Q2 call UNVERIFIED (transcript not yet reviewed; do so in Phase 4.7 backfill).
+**The announce bar**, updated. The site goes public when: (a) nothing on it is visibly stale, (b) the financials section with the implied Waymo P&L exists, (c) multi-operator coverage exists (met in Phase 3), (d) a visitor can subscribe and the `/dispatch` archive holds at least two issues. Announce traffic is a one-time spike, and a launch without a subscribe path spends it.
 
 ---
 
-## Phase 2: Re-entry and freshness
+## Section 0: Before anything else
 
-**Ships publicly**: yes (deploys to the live but unannounced site).
+Housekeeping that lands with, or immediately after, the v3 commit. None of it is a module.
 
-**Goal**: nothing on the site is stale or broken. The scraper pipeline is verified healthy. The database reflects August 2026 reality. This phase is deliberately unglamorous; it is the precondition for everything else.
-
-### 2.1 Repo, pipeline, and database audit
-
-**Background**: the August 2026 planning session could not reach the Supabase project or GitHub Actions history from its sandbox, so the actual state of the data pipeline is unknown. The scraper has theoretically been running weekly since May.
-
-**Do**:
-- Run the repo locally: `npm install`, `npm run build`, `npm run lint`. Note any dependency warnings; do not upgrade majors without surfacing.
-- Check GitHub Actions history for `scrape-cpuc.yml`: has it run weekly since May? Any failures? Did failures reach Slack?
-- Query the database and record: which CPUC quarters exist in `ride_estimates` (specifically, did Q1 2026 land after its ~May publication?), latest `milestones` entry, current `cities` rows and statuses, content of `latest_weekly_rides_disclosed`, row counts per table.
-- Verify the Robotaxi Tracker JSON mirror (`/data/cpuc-waymo-deployment-YYYY.json`) still exists and serves 2026 data; the CPUC scraper depends on it. If the mirror is gone or stale, this becomes the first surfaced decision of the resumption (fallback: scrape CPUC's published spreadsheets directly; that is a bigger lift and needs its own module).
-- Verify Supabase project health (not paused; magic link login still works locally), Slack webhook fires, Vercel deployment still builds from main.
-- Write findings into a short dated section in `architecture.md` under Known gaps and debt, then propose the fix list for the rest of Phase 2 based on what is actually broken vs. the assumptions in this plan.
-
-**Acceptance**: a written audit summary exists; the user has approved the adjusted Phase 2 scope. (Completed 2026-08-15; findings recorded in architecture.md. Modules 2.2, 2.3, and 2.6 reflect the audit results.)
-
-### 2.2 CPUC scraper rebuild (direct) and catch-up
-
-**Background, from the 2026-08-15 audit**: Robotaxi Tracker's JSON mirror is gone; its `/data/*.json` paths now serve the site homepage. The scraper treated the resulting 404s as routine skips, so all 16 GitHub Actions runs since May reported success while ingesting nothing. The database holds Q1-Q4 2025 only; Q1 2026 (published by CPUC in May) never landed. Decision made 2026-08-15: keep the CPUC series and rebuild the scraper against CPUC's own published files.
-
-**Do**:
-- Investigate what CPUC actually publishes (file format, URL stability, per-quarter vs cumulative structure) and propose the parsing approach before writing code.
-- Rewrite `lib/scrapers/cpuc.ts` to fetch from cpuc.ca.gov directly. Keep the existing upsert/restatement logic, source rows, and etiquette (robots.txt, `SCRAPER_USER_AGENT`, 2s delays). Store raw fetched files in Supabase Storage per the scraper rules.
-- Fix the failure semantics that made the outage silent: once a quarter is more than ~6 weeks overdue relative to CPUC's publication calendar (May 1 / Aug 1 / Nov 1 / Feb 1 deadlines), a run that finds nothing new posts a Slack WARN, not a quiet success. Success messages include which quarters exist in the database.
-- Wire `/api/cron/scraper-health` to do its actual job: it still says "no scrapers configured yet". It should report the age of the latest CPUC quarter and the last successful scrape run.
-- Delete the stray `ride_estimates` row (period 2026-03-21 to 2026-03-27, rides_per_week 500000): it is a disclosed-metrics value mis-entered as a CPUC-style row, and it corrupts the quarterly chart (bogus 6.5M "Q1 2026" point) and the KeyStats cumulative tiles.
-- Backfill Q1 2026 and, once published, Q2 2026 (due 2026-08-01, expected imminently).
-- `QuarterlyTripsChart` renders multi-year data correctly (X-axis labels, QoQ across the year boundary) and its as-of footnote derives from data rather than hardcoded copy.
-
-**Acceptance**: scraper runs green in GitHub Actions against the real CPUC source; Q1 2026 (and Q2 if available) in the database and on the chart; the stray row is gone; a simulated missing-quarter scenario produces a Slack WARN; health cron reports real scraper state.
-
-### 2.3 National disclosed-metrics series
-
-**Background**: decision made 2026-08-15. The site's headline quantitative story should be national/global, not CA-only. Waymo's disclosed worldwide weekly-rides arc (100K -> 250K -> 500K -> the stated 1M end-2026 target) becomes a first-class time series now, rather than waiting for the Phase 4 extraction pipeline. Phase 4 later feeds this table automatically; Waymo's own blog/newsroom is where most disclosures actually break, so a lightweight monitor for it is part of Phase 4's scope.
-
-**Do**:
-- New migration (show SQL before applying): `disclosed_metrics` table. Proposed shape: `id` uuid pk, `company_id` fk, `metric` text (e.g. 'weekly_rides', 'cumulative_trips', 'fleet_size', 'cities_count'), `value` numeric, `as_of` date, `scope` text default 'worldwide', `source_id` fk (required in practice), `stated_by` text nullable (e.g. 'Waymo blog', 'Alphabet Q1 2026 call'), `notes` text, `created_at`. UUID pk keeps the audit trigger compatible.
-- Migrate the `latest_weekly_rides_disclosed` site_content row into the table; rewrite `lib/disclosed-metrics.ts` to query the table (latest row per metric) instead of parsing YAML-ish site_content text; retire the fragile text format and its fix-up scripts. ThesisHero and KeyStats keep their current prefer-disclosed behavior unchanged.
-- Seed the weekly-rides disclosure arc by hand with source rows (the ~100K, 250K, 500K disclosures and dates; re-verify each against its primary source at entry).
-- Build the headline national chart on the landing page: disclosed weekly rides over time (stepped line or dot-per-disclosure; disclosures are episodic, and the chart should be honest about that), with the 1M end-2026 target rendered as an annotation, not a data point. Editorial framing paragraph; the flat-500K observation belongs here if the user approves that copy.
-- Admin CRUD for `disclosed_metrics` following the existing pattern.
-
-**Acceptance**: migration reviewed and applied; table seeded with sourced arc; national chart renders on the landing page above the CA section; hero and KeyStats read from the new table; admin can add a future disclosure end to end.
-
-### 2.4 Waymo city roster and status refresh
-
-**Background**: the `cities` table has 11 rows with statuses as of ~April 2026. Reality as of August: see the briefing above. New cities exist in every status, and the current status enum ('announced' | 'waitlist' | 'public' | 'paused') has no value for "driverless operations, employee-only, public soon" (Las Vegas, Denver, San Diego, Tampa).
-
-**Do**:
-- Surface the status-modeling decision before any migration: either (a) add an 'employee' status value via migration, or (b) map employee-only cities to 'announced' with a note. Recommendation: (a); the distinction is analytically meaningful (driverless ops running vs. paper announcement) and the timeline UI can style it. User decides.
-- Update all existing city rows to August 2026 statuses (Dallas open, Miami/Orlando open, Nashville public, Houston/San Antonio waitlist, etc.) with source rows for each change.
-- Add new rows: the four employee-only cities, Sacramento, Detroit, Washington DC, and (decision to surface) whether to include the full announced list and international testing cities (Tokyo, London) or hold those for a milestone-only treatment. Recommendation: include announced cities sparingly (only where Waymo has named a timeframe or begun operations) so the map and timeline stay signal-dense.
-- Update `service_area_sq_mi` where new figures are disclosed (CPUC's 2026-08-14 territory expansion is a source for CA).
-- Verify the coverage map and city timeline render the updated roster well at the new city count (~15-18 rows; the accordion and map were designed at 11).
-
-**Acceptance**: cities table matches verified August 2026 reality with sources; timeline and map render cleanly; status decision documented in `architecture.md`.
-
-### 2.5 Milestones backfill
-
-**Do**:
-- Backfill milestones for May through August 2026, each with a source row and (optionally) a `kyle_annotation`. Candidates from the briefing: freeway suspension (May) and resumption (2026-07-29); sixth recall (June); Uber-Waymo Phoenix pilot ending (May/June); Austin/Atlanta exclusivity unwind announcement (2026-07-24); Dallas open access (2026-08-04); CPUC Sacramento/San Diego approval (2026-08-14); Las Vegas Raiders partnership (2026-08-13); the four-city employee-driverless announcement (2026-07-08). The $16B raise (2026-02-02) and the 500K milestone are already present from the earlier seed (verified in the 2026-08-15 audit).
-- Editorial note for the thesis/hero copy: the flat-500K-across-disclosures observation (rides held steady while cities grew from 10 to 15) is exactly the kind of insight this site exists to surface. Draft a short thesis-section update for user review; do not publish without approval since it is an analytical claim.
-- Add a `fleet_snapshots` row for the ~3,500-4,000 figure only if a citable primary source is found; the current sources conflict.
-
-**Acceptance**: milestones feed reads as current through August 2026; no UNVERIFIED briefing item entered the database.
-
-### 2.6 Debt paydown (announce-visible only)
-
-**Do**, from the `architecture.md` debt list plus the 2026-08-15 audit findings, only the items a visitor or admin would hit:
-- Fix the KeyStats year-scoping bug: the "Trips in 2025 (CA)" and "Miles driven 2025 (CA)" tiles sum every quarter in the table regardless of year. Scope the sums to the most recent complete calendar year and derive the label from data. Same fix for the QuarterlyTripsChart framing sentence ("completed X trips in California in 2025" currently sums all points).
-- Remove hardcoded staleness-prone copy: "filed February 2026" (KeyStats tooltip and chart footnote), "2026 figures expected May 2026 onward". Derive from data or drop.
-- Fix status badges: `CityLaunchTimeline` and the CoverageMap popup collapse 'waitlist' into "Announced". Render all statuses distinctly (matters more once the status model expands in 2.4).
-- Fix the broken delete confirmation on `companies/[id]` (server-form `confirm()` bug); apply the same pattern check to all other delete forms.
-- Add missing `revalidatePath` calls to fleet-snapshots, ride-estimates, and financial-periods mutations (they will matter once landscape and financials pages read those tables).
-- Regenerate `lib/supabase/types.ts` properly for the migrations landed in 2.3/2.4 (and retire the manual patches).
-- Magic-link login click-through retest against prod (deferred from 1.6).
-- Explicitly deferred: `site_content` YAML textarea hardening, audit trigger generalization, city detail pages, `service_area_geojson` polygons.
-
-**Acceptance**: listed fixes verified (delete confirm in a real browser per the working agreement); deferred list re-recorded in `architecture.md`.
-
-### 2.7 CLAUDE.md and architecture.md revision
-
-**Do**:
-- Propose a `CLAUDE.md` edit set for user approval: amend the "multi-company data, Waymo-only frontend" architecture principle to the v2 principle 7 wording; add a "Phase 2 status" section on completion; note the extraction-model decision as pending Phase 4; update the First session section to point at this plan.
-- Update `architecture.md` per the standard maintenance block (this phase touched schema, data, and components).
-
-**Acceptance**: user approved the CLAUDE.md diff; both files committed with the module work.
+1. **The v3 commit carries the uncommitted 4.12 wrap-up.** `architecture.md` (orphan `cities_count` finding, annual-total gap rewrite), the 4.12 acceptance notes (now in `build-log.md`), and `scripts/audit-promotion-mapping.ts` (orphan reporting, post-fix promotion detection) have sat uncommitted since 2026-08-20. They ship in the same commit as this plan, named in the commit message.
+2. **New files in the same commit:** `build-log.md` (every v2 "(Built ...)" note, verbatim, under its module number) and `briefing-2026-08.md` (the v2 "State of the world" section, archived as a dated snapshot; it is five weeks old and must not be read as current).
+3. **`CLAUDE.md` edit set** (shown for approval before writing): session-start reading list gains `build-log.md`; stack gains Resend and Vercel Web Analytics; architecture principles gain v3 principles 10 and 11; build status rewritten to match the phase map above (it still says "Next: 4.12"); the maintenance block gains one line, "build narrative goes to `build-log.md`, not `dev-plan.md`".
+4. **Freshness catch-up, one session, no new code.** The site has been idle since 2026-08-20. Check and fix: all four GitHub Actions green and still reaching Slack; CPUC Q2 2026 landed (it was due 2026-08-01); Baidu Apollo Go and Pony.ai Q2 snapshots (overdue since 2026-08-18); WeRide and Zoox snapshot ages; city roster against `waymo.com`; any EDGAR events waiting in the review queue. Record findings in `architecture.md`.
+5. **Pending-user items from the debt ledger:** regenerate `lib/supabase/types.ts`; set `GITHUB_DISPATCH_TOKEN` and exercise the reprocess button once; remove the duplicate `SCRAPER_USER_AGENT`; decide the orphan `cities_count 11 @ 2026-04-29` row (re-cite from the Q1 2026 call or delete).
 
 ---
 
-## Phase 3: Competitive landscape
+## Phases 2 and 3: complete
 
-**Ships publicly**: yes (deployed; announcement still held for Phase 5).
+Module-by-module detail and every design note: `build-log.md`. Summary:
 
-**Goal**: `/landscape` becomes the best sourced, most honest single page on the internet about who is actually operating robotaxis, at what scale, with what disclosure quality. This is the phase that makes the site match its "AV deployment tracking" ambition.
+- **Phase 2** (2.1 to 2.7): resumption audit; CPUC scraper rebuilt against cpuc.ca.gov with overdue-quarter Slack WARN; `disclosed_metrics` and the national trajectory chart; city roster refresh with the 'employee' status; milestones backfill; announce-visible debt paydown; docs revision.
+- **Phase 3** (3.1 to 3.5): operator programs and roles; competitor snapshots with `disclosure_quality`; `/landscape`; CPUC deployment-vs-pilot comparison (Waymo, Zoox, Nuro); Tesla prose sidebar.
 
-### 3.1 Operator data model
-
-**Do**:
-- Show migration SQL before applying (working agreement). Proposed additions:
-
-```
-competitor_snapshots
-  id uuid pk
-  company_id uuid fk -> companies
-  snapshot_date date
-  cities_served int                    nullable
-  vehicle_count int                    nullable
-  weekly_rides int                     nullable
-  cumulative_rides numeric             nullable
-  autonomous_miles_cumulative numeric  nullable
-  funding_total_usd numeric            nullable
-  implied_valuation_usd numeric        nullable
-  supervision text                     'driverless' | 'safety_operator' | 'mixed' | 'safety_driver_legal_driver'
-  disclosure_quality text              'regulatory' | 'company_disclosed' | 'earnings_disclosed' | 'press_reported' | 'estimated'
-  source_id uuid fk -> sources         required in practice; enforce in admin UI
-  notes text
-  created_at
-```
-
-- Every column nullable by design (principle 7: sparse data is normal). `disclosure_quality` implements principle 9 at the schema level.
-- **Operator roles (added 2026-08-15 for Nuro/Lucid/Uber).** A "deployment" is not always one company. Nuro (driver), Lucid (vehicle), and Uber (fleet owner and network) jointly form one operator; Waymo rides in Austin run on Uber's network; Apollo Go rides in Dubai run on Uber's app. Model this with an `operator_programs` table (one row per deployment program, e.g. 'Uber premium robotaxi', 'Waymo One', 'Zoox') and an `operator_program_roles` join (program_id, company_id, role in 'av_developer' | 'vehicle_platform' | 'fleet_operator' | 'network'). `competitor_snapshots` and competitor `cities` rows key on the program, not the company, so the landscape table has one row per thing-on-the-road. Single-company programs (Waymo, Zoox, Tesla, Apollo Go) simply hold all roles. Show the SQL for approval; this supersedes the company-only shape above.
-- Extend `companies` with `hq_country text`, `ownership text` (e.g., 'Amazon subsidiary', 'Nasdaq: PONY'), `status_summary text` (one editorial sentence, admin-maintained). Add company rows: Nuro, Lucid, Uber, Avride, May Mobility, Motional, Didi (decision 2026-08-15: include the minor operators; rows are cheap and the table filters).
-- The `cities` table already supports non-Waymo rows via `company_id`; add a nullable `program_id` for the same reason. Enter competitor cities (Zoox Las Vegas/SF/Austin, Tesla's seven metros, Nuro/Lucid/Uber Bay Area and Houston, Apollo Go Dubai, WeRide Abu Dhabi/Dubai, Pony Zagreb, etc.) with correct statuses; the Waymo-only queries on existing pages already filter by company and are unaffected (verify).
-- Admin CRUD for programs, roles, and `competitor_snapshots` following the existing admin page pattern.
-
-**Acceptance**: migration reviewed and applied; admin can enter a full competitor snapshot with source; existing Waymo pages unaffected (verified in browser).
-
-### 3.2 Sourced data entry
-
-**Do**:
-- Enter initial snapshots for Waymo, Zoox, Tesla, Nuro/Lucid/Uber, Baidu Apollo Go, Pony.ai, WeRide, plus the minor US operators, using the State of the world briefing as the checklist but re-verifying each figure against its primary source at entry time. UNVERIFIED items stay out.
-- Timing note: Baidu and Pony.ai report Q2 2026 earnings on 2026-08-18. Module 3.2 ran 2026-08-15 with Q1 2026 figures for both. **TODO after 2026-08-18: add a fresh snapshot row for `apollo-go` and `pony-ai` via /admin/snapshots (or extend the seed script) with Q2 numbers, and check whether the Wuhan outage and permit freeze dented Apollo Go's Q2 ride volume.**
-- Every snapshot row carries `disclosure_quality` honestly: Tesla's "7 metros" is company_disclosed; its ~21-car unsupervised fleet is press_reported (derived from Tesla's own chart by analysts); Waymo CPUC trips are regulatory.
-
-**Acceptance**: at least one complete, sourced snapshot per major operator; spot-check that every row's source URL resolves. (Done 2026-08-15: 11 snapshots, 30 competitor city rows via `scripts/seed-competitor-snapshots.ts`.)
-
-### 3.3 Landscape page
-
-**Do**:
-- Build `/app/(public)/landscape/page.tsx` inside the existing `(public)` layout pattern. Structure, top to bottom:
-  1. **Editorial opening** (site_content key `landscape_intro`, admin-editable): the state of the race in three paragraphs. Draft placeholder copy marked `// TODO: user to replace with final copy`.
-  2. **The comparison table** (`components/sections/OperatorTable.tsx`): operators as rows (not columns; the operator count now exceeds the horizontal budget). Columns: operator, ownership, cities serving riders, supervision status, fleet, weekly or cumulative rides, latest disclosed valuation/funding, disclosure quality badge. Every cell an as-of date; empty cells render as "not disclosed" rather than blank (the emptiness is information).
-  3. **Supervision-status framing module**: a visual strip separating "driverless, paid, public" (Waymo, Zoox Vegas, Apollo Go, Pony, WeRide in specific cities) from "supervised or legally-a-driver" (Tesla Bay Area, Riyadh operators, etc.). This is the page's core editorial argument rendered as UI.
-  4. **US deployment map**: extend `CoverageMap` with a landscape variant showing multi-operator city markers (distinct marker style per operator, no service-area polygons for non-Waymo operators since areas are mostly undisclosed). Surface before building if this should instead be a separate lighter component; reuse is preferred but not at the cost of complicating the Waymo map.
-  5. **China and international section**: prose plus a compact static table (the v1 5.4 module, upgraded with the now-substantial international expansion: Dubai, Abu Dhabi, Zagreb, Switzerland). Editorial framing: what Apollo Go's 350K weekly rides at ~$28K vehicle cost implies for the US cost curve.
-  6. **Methodology footnote**: disclosure-quality taxonomy explained; links to CPUC, SEC, earnings sources; explicit statement of what the site refuses to guess.
-- Add Landscape to the global nav (it exists in the v1 nav spec but verify it is present and points here).
-- Tooltips and `<Term>` usage throughout; add glossary entries as needed (candidate terms: supervision levels, TCP permit, NHTSA exemption, Standing General Order).
-
-**Acceptance**: page renders with real entered data; sparse cells degrade gracefully; mobile responsive; nav link live; browser-verified.
-
-### 3.4 Disclosed-data comparison: Waymo vs. Zoox (and Nuro) via CPUC
-
-**Background**: v1 planned a Waymo vs. Tesla disclosed-data comparison and told us to re-investigate at planning time. Investigated: Tesla still files no California AV data (TCP permit, not an AV deployment permit), so no honest disclosed-data comparison with Tesla exists. Zoox files in the CPUC Pilot Program, and Nuro joins it from Q2 2026 (Drivered Pilot permit 2026-05-08): same regulator, same cadence as the site's primary Waymo source. Confirmed in 2.2 that CPUC's pilot zips (`av-pilot-YYYYqQ.zip`) use the same CSV layout as the deployment zips, so the 2.2 parser applies.
-
-**Do**:
-- Extend `lib/scrapers/cpuc.ts` to also fetch the Pilot Program zip each quarter and ingest per-carrier monthly rollups for Zoox and Nuro (and Waymo's own pilot-tier data if present) into `ride_estimates` keyed by program, `confidence 'high'`, with a methodology note distinguishing pilot from deployment tiers.
-- Build a modest comparison chart on the landscape page: Waymo deployment trips vs. Zoox pilot trips, CA only, log scale or dual annotation (the gap is orders of magnitude; the chart's honesty about that gap is the point).
-- Tesla gets a prose treatment instead: a short sourced sidebar on why Tesla does not appear in disclosed-data comparisons (no CPUC AV filings; the CPUC "is the driver" statement). This is more credible than a mixed-confidence chart, and more interesting.
-
-**Acceptance**: comparison renders from disclosed data only; Tesla sidebar sourced; methodology tooltip complete. (Built 2026-08-15: migration 0011, pilot ingestion with xlsx reader, CpucComparisonChart, regulatory section with Tesla sidebar. Zoox Q1 2026 pilot: 23,068 driverless trips, doubling month over month.)
-
-### 3.5 Ship checkpoint
-
-**Do**: deploy, verify all Phase 3 acceptance criteria, update `architecture.md` and `pre-launch.md`, notify user for review. No announcement.
-
-(Done 2026-08-15: nav trimmed to routes that exist (Trajectory added, five unbuilt sections removed until they ship); pre-launch.md gains placeholder-copy sweep, snapshot freshness, and types regeneration items. Phase 3 is code-complete pending the user's local steps: push, `supabase db push` for 0010 and 0011, run the three seed scripts and the scraper (which now also backfills Zoox pilot quarters), regenerate types.)
+v2 open decisions 1, 2 and 4 (city status enum, announced-cities policy, landscape map approach) were all decided and built in those phases; see the decisions log.
 
 ---
 
 ## Phase 4: Financials and the extraction engine
 
-**Ships publicly**: yes (deployed; announcement held for Phase 5).
+**Ships publicly**: yes (deployed; announcement held for Phase 7).
 
-**Goal**: the implied Waymo P&L (the artifact an investor screenshots for an IC memo) built on top of an automated earnings-extraction pipeline, so the financial picture refreshes itself each quarter instead of rotting between sessions. This merges v1 Phases 3 and 4 and reverses their order: pipeline first, P&L on top.
+**Goal**: the implied Waymo P&L (the artifact an investor screenshots for an IC memo) on top of an automated earnings-extraction pipeline, so the financial picture refreshes itself each quarter.
 
-**Sequencing note**: v1 derived implied-P&L COGS from the unit economics assumptions table, which now ships post-announce (Phase 6). The v2 implied P&L therefore ships as v1: revenue build from disclosed rides and modeled fare, opex allocated from Other Bets, capex modeled, with gross-margin decomposition explicitly marked "arrives with the unit economics module." When Phase 6 ships, the P&L upgrades in place. This dependency is deliberate and documented in the P&L's methodology tooltip from day one.
+**Done** (detail in `build-log.md`): 4.1 data model; 4.2 EDGAR scraper; 4.3 transcript scraper; 4.4 extraction pipeline; 4.5 review queue and fix(4.5); 4.6a and 4.6b public earnings section with permalinks, disclosure-posture matrix, client filter, shared OG route; 4.7 backfill (33 events, 162 approved mentions); 4.12 promotion keyed off the model's reading.
 
-### 4.1 Data model
+**Retired number**: 4.11 (Waymo site roster scraper) moves to 5.4, because its "report, do not write" design is the staging pattern Phase 5 builds.
 
-As specified in v1 4.1 with two changes: `earnings_events.event_type` gains 'shareholder_letter', and the v1 `extracted_metrics` table is dropped in favor of the existing `disclosed_metrics` table (2.3): approving a metric-type mention in the review queue promotes it to a `disclosed_metrics` row with `attribution 'company'` and links back via `waymo_mentions.disclosed_metric_id`. Show full migration SQL before applying.
+**Execution order for what remains**: 4.13, 4.8, 4.9, 4.10, then 4.14 (4.14 can float; nothing on the announce bar depends on it).
 
-(Built 2026-08-15: migration 0012, types, `/admin/earnings` events list and `/admin/earnings/[id]` review queue with approve/reject/edit, bulk approve, and metric promotion for ride_count -> weekly_rides, city_count -> cities_count, fleet_size -> fleet_size. Model decision recorded in CLAUDE.md.)
+**Sequencing note, carried from v2**: the implied P&L ships without the unit-economics COGS derivation, which arrives in Phase 8. Gross-margin decomposition is explicitly marked "arrives with the unit economics module" in the P&L's methodology tooltip from day one, and upgrades in place.
 
-### 4.2 SEC EDGAR scraper
+### 4.13 The Q2 2026 call
 
-As specified in v1 4.2 (`lib/scrapers/sec-edgar.ts`, daily GitHub Action, Alphabet CIK 0001652044, 10-K/10-Q/8-K detection by accession number, raw filings to Supabase Storage, `pending` status rows, SEC fair-use etiquette).
+**Background**: Motley Fool published no Alphabet transcript for Q2 2026 (or Q3 2024). The Q2 2026 call is available from Alphabet IR (abc.xyz). It closes the last UNVERIFIED item from the August briefing: what was said about Waymo on that call.
 
-(Built 2026-08-15. Design notes from investigating the live API: 8-Ks are filtered to item 2.02 (earnings releases) since Alphabet files many governance 8-Ks; the EX-99.1 press-release exhibit is fetched alongside the primary doc because that is where the numbers live; 8-K fiscal period is the quarter before the release date. Verified at the primary source that Alphabet's Q2 2026 earnings release contains zero Waymo mentions (Other Bets revenue $382M, operating loss $1.8B), so the pipeline's honest output for that event is "0 mentions". Alphabet added as a companies row (filer). Daily action `scrape-edgar.yml`, 6 fixture tests.)
+**Do**:
+- robots.txt check on abc.xyz first; surface the result.
+- Ingest the Q2 2026 call as an `earnings_events` row through the existing pipeline. If the IR format differs enough from Fool's that the transcript parser does not apply, surface the choice between a small IR parser and a one-off manual ingest script before writing either. One document does not justify a scraper; a recurring gap does, and Fool has now skipped two of nine quarters.
+- Review the extracted mentions in the queue.
 
-### 4.3 Earnings call transcript scraper
-
-As specified in v1 4.3, with a pre-build check: verify Motley Fool transcripts remain accessible and robots.txt-permitted in August 2026; if not, surface alternatives (Seeking Alpha is generally paywalled; Alphabet's own IR site posts webcast transcripts/prepared remarks) before writing any scraper.
-
-(Built 2026-08-15. Pre-build check passed: fool.com robots.txt permits `/earnings/call-transcripts/` and the Q1 2026 Alphabet transcript renders as plain HTML. Discovery reads Fool's monthly sitemaps (listed in robots.txt) for the two months after each quarter end and matches `/earnings/call-transcripts/YYYY/MM/DD/alphabet-{googl|goog}-qN-YYYY-earnings-call-transcript/`, skipping quarters already in `earnings_events`. (First version probed candidate dates directly; the first live run on 2026-08-15 tripped Fool's rate limiter with a 429 and blocked page, so that approach was replaced the same day. Also found on that run: pre-2025 transcripts use the classic layout with bold speaker header paragraphs, and some quarters are filed under the GOOG ticker; both handled.) Body parsing handles both layouts and groups paragraphs into speaker turns. Raw page plus turns.json to Storage; weekly action `scrape-transcripts.yml`; 9 parser tests. If Fool changes its URL pattern or moves transcripts behind a wall, the weekly run reports 0 found and the health check will surface the staleness.)
-
-### 4.4 Extraction pipeline
-
-As specified in v1 4.4 (chunking, structured extraction to the `waymo_mentions` schema, Zod validation, `extraction_version`, hourly cron), with two updates:
-- Model: use the model chosen in the Phase 4 model decision (see Tech stack section above), not the hardcoded April 2026 string.
-- Add per-event cost logging (tokens in/out) to the Slack success notification, so pipeline economics are visible from the first run.
-
-(Built 2026-08-15: `lib/extraction/` (schema, text, extract, run), migration 0013 (per-event tokens, chunk count, dropped-quote count), `scripts/run-extraction.ts`, hourly action `extract-earnings.yml`, 9 offline tests with an injected fake model. Design notes: passages are labelled and pre-filtered to those mentioning Waymo or Other Bets plus one neighbour, so a filing with no Waymo text (Q2 2026 8-K) is marked extracted with 0 mentions and 0 model calls; the model returns quotes via forced tool use and every quote is verified verbatim (normalised for curly quotes and dashes) against the passage it cites before it is stored, unverifiable ones are counted and dropped; speaker names come from the transcript turn, not the model. Runs on GitHub Actions rather than Vercel Cron because Hobby crons are daily-only and a 10-K may need many model calls. Cost shown as an estimate from configurable per-token prices; the first real run is the calibration. Follow-up the same day after the first dry run: financial table rows are prefixed with the table caption, header rows, and section label so "Other Bets 450 411" reads as "[Segment results (in millions) Quarter Ended March 31, 2025 2026 | Revenues:] Other Bets 450 411"; quote minimum lowered to 10 characters so a table row can be quoted whole. First live results, Q1 2026 8-K and call: 6 and 5 mentions, 0 unverified, about $0.03 and $0.06; the 8-K repeats its segment table so identical metric/value/period mentions are now deduplicated within an event. Backfill of the other 31 events: 26 clean, about $1.30 total; the 5 failures were all-or-nothing validation on one malformed mention (stringified array, invented metric slug, sub-10-char quote), so validation is now per mention with shape repair (`coerceExtractionOutput`) and individual drops.)
-
-### 4.5 Admin review queue
-
-As specified in v1 4.5. Nothing extracted is public until approved; this is the existing `pending_review` etiquette applied to LLM output.
-
-(Built 2026-08-15, scope agreed at the end of the 4.4 session: filters and a next-unreviewed jump on the events list, a mention status filter on the review page, a needs-a-number prompt, a link from each mention to the stored source at its cited passage, a per-event dropped-quotes log, and a reprocess button. No migration. Design notes: the drop log needed somewhere to live, because 4.4 stored only a count and discarded the quotes themselves. Extraction now writes `scraped-raw/extraction-logs/{event_id}/v{version}.json` holding each dropped quote with its reason ('invalid_schema' or 'unverified', which 4.4 conflated under one counter), chunk, and cited locator; Storage rather than a column keeps the module migration-free, and the log is written even when nothing was dropped, so a missing log means "extracted before 4.5" rather than "lost nothing". The 33 backfilled events therefore have counts but no quotes, the 5 on the Q3 2025 call among them; reprocessing produces a log, but the model is not deterministic and a re-run may drop a different set. The needs-a-number guard disables Approve on a metric-type mention with no value until a number is entered or "approve without promoting a number" is ticked, and bulk approve leaves those mentions pending rather than approving something that can never promote; bulk approve also promotes metrics now, which it previously skipped silently. Reprocess dispatches extract-earnings.yml through a new `event` input rather than calling the model inside a Vercel function, which a multi-chunk 10-K would outrun: it needs GITHUB_DISPATCH_TOKEN and renders disabled without one. The stored-source viewer re-derives passages with the extraction parser, so ids match stored locators as long as text.ts does not change. architecture.md hit its 500-line ceiling during this module; the scraper and extraction bullets in Libraries were compressed to what exists, with the how-it-got-built detail left here.)
-
-### 4.6 Public earnings section
-
-As specified in v1 4.6 (`/earnings` timeline of events with approved mentions, metrics-evolution view, full-text search, per-event permalinks with OG images).
-
-**Split into 4.6a and 4.6b** (agreed 2026-08-16): five deliverables is too large for one browser-verifiable commit.
-
-- **4.6a**: `/earnings` timeline, per-event permalinks, extraction methodology copy, nav link, revalidation wiring.
-- **4.6b**: metrics-evolution view, verbatim search, shared OG route.
-
-Scope decisions taken at planning time:
-- **Search is a client-side filter**, not a Postgres tsvector migration. The corpus is 33 events and 162 approved mentions, all of which fit in one ISR payload. Revisit past a few thousand mentions.
-- **Permalinks derive their slug** from `fiscal_period` + `event_type` (`alphabet-q1-2026-earnings-call`) and resolve by lookup on those columns. No slug column, no migration. Assumes uniqueness per (period, type).
-- **Events with zero approved mentions render as thin muted rows** ("no Waymo mentions") rather than being hidden. A quarter where Alphabet said nothing about Waymo is a finding, and showing them proves the pipeline is not cherry-picking. The Q2 2026 8-K is the honest example.
-- **The metrics-evolution view must not redraw the homepage arc.** `NationalTrajectory` already plots `disclosed_metrics` weekly rides. The earnings view reads `waymo_mentions` instead, including mentions that never promoted: it answers "when was this said, by whom, in what words", not "how many rides".
-- **Multi-source citation uses the existing `waymo_mentions.disclosed_metric_id` back-link**, queried from the mentions side. One `disclosed_metrics` row keeps one primary `source_id`; no join table, no migration.
-- **The shared `/api/og` route is built in 4.6b**, not deferred to Phase 5.1. Permalinks are the shareable artifact, so 4.6 needs it and 5.1 extends it to the other five surfaces.
-
-**Blocked by**: `fix(4.5)`. The 4.5 review pass promoted six `disclosed_metrics` rows, four of which were wrong (see that commit). 4.6a publishes those figures beside named-executive quotes, so it starts from corrected data.
-
-(4.6a built 2026-08-20, commit `be4752a`. Slugs are generated for every event and compared rather than parsed, because company slugs, event types and periods all contain hyphens so no unique split exists; a collision 404s and logs instead of serving one of two documents. Silent events render with which silence applies, since anon sees every `earnings_events` row whatever its `processing_status` and the daily EDGAR action means an unreviewed filing usually exists: "nobody has looked yet" is not "Alphabet said nothing". Public reads moved to a new cookieless anon client, `lib/supabase/public.ts`, because `server.ts` reads cookies and an admin browsing the page would authenticate against RLS and see unapproved model output as published.
-
-The one real defect, found in browser verification: table rows were rendering as quotations. `annotateTableRows` prefixes every table row with its caption and headers so the model can read a bare row of numbers, and `verifyQuote` matches that prefixed text, so `quote_text` correctly stores scaffolding Alphabet never wrote. Published as a quote it read "[Three Months Ended Six Months Ended | Revenues:] Other Bets 373 382 823 793" under a heading saying what Alphabet said. Fixed by classifying before rendering (`lib/earnings-table.ts`): prose is quoted, table rows are readings led by the figure already parsed into `extracted_metric`, with the row kept visible as an audit line. Stored quotes are never rewritten to read better, because a smoothed quote is indistinguishable from an invented one; the review queue keeps `quote_text` read-only for the same reason.)
-
-(4.6b page work built 2026-08-20. **The metrics-evolution view was replaced during the build.** The plan assumed a corpus of figures; the corpus is 162 approved statements carrying 4 published figures, overwhelmingly strategy commentary. Four points is not an evolution, and `NationalTrajectory` already charts the disclosed arc with more points than this pipeline has produced. Built instead: a disclosure-posture matrix, mention register by fiscal quarter across all 162 mentions, answering how Alphabet's willingness to talk about Waymo changed rather than how fast Waymo grew. It satisfies the standing "must not redraw the homepage arc" constraint more cleanly than the original, because it is not about rides. Rendered as an accessible table rather than a chart: the counts are small enough that a stacked bar would be slivers, and an empty quarter has to read as empty rather than as a short bar.
-
-The filter indexes presented text, never raw `quote_text`. Indexing the latter would let a phrase search match across the synthetic bracket-and-pipe boundary that `annotateTableRows` introduced, returning hits on strings no filing contains, on a feature whose promise is the word verbatim. `?q=` is read through `useSearchParams`, which forces a Suspense boundary on this ISR route; the fallback is the full unfiltered timeline rendered on the server, so the static HTML still carries the whole record.
-
-The shared OG route completes 4.6b, built as `/api/og/[kind]/[id]`: it takes an id and derives every string from the database, because `/api/og?title=...` is one line shorter and hands anyone an endpoint for stamping arbitrary words onto the site's branding, which cannot be withdrawn once permalink URLs circulate. 5.1 extends it by adding a `kind`, not a caller.
-
-Two things the route forced. Fonts are vendored as woff under `app/api/og/_fonts/` (53KB, latin subset): satori parses ttf, otf and woff but not woff2, and `next/font/google` never exposes a binary. Both faces were verified offline to produce distinct real glyph outlines rather than silently falling back, which is the failure that would otherwise only show up as an ugly card in someone else's feed. And `metadataBase` was missing from the root layout, so relative card URLs would have been dropped by every crawler; it now derives from `NEXT_PUBLIC_SITE_URL`, then Vercel's production host, then localhost.
-
-Card headline selection lives in `lib/earnings-card.ts` rather than the route, so the rule that a table row never becomes a card quote is unit tested. A card travels into other people's feeds with no page around it, so the 4.6a mistake would have been worse there than it was on the page.)
-
-### 4.7 Backfill
-
-Run the backfill script for the last 8 quarters of Alphabet filings and calls (Q3 2024 through Q2 2026). This closes the UNVERIFIED item from the briefing (what was said about Waymo on the Q2 2026 call) and seeds the metrics-evolution view with the 100K -> 250K -> 500K weekly-rides disclosure arc.
-
-(Run 2026-08-15, ahead of order, as the first live use of 4.4: 26 SEC filings (Q2 2023 through Q2 2026) and 7 Motley Fool transcripts (Q1 2024, Q2 2024, Q4 2024, Q2 2025 through Q1 2026) extracted, 33 events total, about $1.50 in model cost. Fool did not publish Alphabet transcripts for Q3 2024 or Q2 2026; the Q2 2026 call is available from Alphabet IR (abc.xyz) and is the remaining gap for the UNVERIFIED item. All mentions are pending review; the highest-value approvals are the metric mentions in the 8-Ks and calls, which promote to disclosed_metrics.)
+**Acceptance**: the Q2 2026 call appears on `/earnings` with reviewed mentions; the decision about a recurring IR fallback is recorded.
 
 ### 4.8 Other Bets walk
 
-As specified in v1 3.1: admin entry for Other Bets quarterly figures (the briefing has Q1/Q2 2026; backfill earlier quarters from filings ingested in 4.7), `OtherBetsWalk` chart separating the user-estimated Waymo share with explicit estimate labeling.
+**Background**: v1 specified hand entry of Other Bets figures. Since then the extraction pipeline reads `revenue_usd` and `operating_loss_usd` from every 10-Q, 10-K and earnings release, and 4.12 deliberately promotes those slugs to nothing, "pending the Other Bets walk". Hand entry would make the P&L the one financial surface that rots each quarter, against v2 decision 3 (automation is prioritized).
+
+**Do**:
+- Give `revenue_usd` and `operating_loss_usd` a promotion path into `financial_periods` (company Alphabet, segment Other Bets, `is_disclosed true`, source from the event). Surface first: `financial_periods` has no segment column, so either the Other Bets rows are keyed by a convention on `company_id` and `methodology_note`, or a `segment text` column is added by migration. Recommendation: the column. Show the SQL.
+- The same promotion rules as `disclosed_metrics` apply: one row per (company, segment, fiscal_period); a restated figure updates in place with a note; rejecting the mention withdraws the row if nothing else cites it. Extend `decidePromotion` tests rather than writing a parallel path.
+- Backfill from the 33 events already reviewed, as a report a human approves (the 4.12 audit pattern), never an automatic write over reviewed decisions.
+- Admin entry on `/admin/financial-periods` stays, as the fallback and for the Waymo-share estimate.
+- Build `components/charts/OtherBetsWalk.tsx`: stacked bars of Other Bets revenue and operating loss by quarter, with the owner-estimated Waymo share separated from the rest (Verily, Wing, GFiber, X residual). The Waymo share is an estimate and is rendered as one: open or hatched fill, a methodology tooltip on the bar, per principle 9.
+- The Waymo-share estimate needs a value per quarter from the owner. Ask; do not fabricate. Until provided, the chart renders the disclosed segment totals only.
+
+**Acceptance**: approving an Other Bets revenue mention writes or links a `financial_periods` row and never a `disclosed_metrics` row; the walk renders every quarter from Q2 2023 forward from promoted data; the estimate is visually distinct from disclosed figures; fix(4.5) and 4.12 regression tests still pass.
 
 ### 4.9 Implied Waymo standalone P&L
 
-As specified in v1 3.2 (`implied_pnl_periods` table, weekly recompute cron for unlocked periods, table view with disclosed-vs-modeled columns, CSV export, admin lock/override), minus the unit-economics COGS derivation per the sequencing note above. Methodology strings must state the v1 simplification plainly.
+**Do**:
+- New migration (show SQL first), `implied_pnl_periods`:
+
+```
+implied_pnl_periods
+  id uuid pk
+  company_id uuid fk
+  fiscal_period text
+  period_start, period_end date
+  revenue_usd numeric            derived: disclosed rides x modeled fare, stored for transparency
+  revenue_methodology text
+  cogs_usd numeric               null until Phase 8
+  cogs_methodology text          states the simplification plainly
+  gross_profit_usd numeric       null until Phase 8
+  opex_usd numeric               allocated from Other Bets
+  opex_methodology text
+  operating_income_usd numeric
+  capex_usd numeric
+  capex_methodology text
+  free_cash_flow_usd numeric
+  is_locked boolean              true when the owner has reviewed and approved
+  created_at, updated_at
+```
+
+- **Assumptions store (spec gap in v2).** The revenue build needs a modeled average fare, and the opex build needs an Other Bets allocation share; the assumptions table does not arrive until Phase 8. Surface before building: a small `model_assumptions` table now (key, value, unit, as_of, source_id nullable, rationale), designed so Phase 8 extends it and does not replace it. Every assumption is owner-provided with a rationale; placeholders are marked and never ship.
+- **Rides between disclosures (modeling decision, surface it).** Weekly-rides disclosures are episodic. A quarter's revenue needs a rides figure for the whole quarter. Options: step function from the last disclosure, linear interpolation between disclosures, or CPUC-shaped interpolation. The choice is stated in `revenue_methodology` on every row.
+- Recompute: regenerate unlocked periods when an input changes (a promoted metric, an assumption edit) via the admin write path, plus a weekly safety-net run. Vercel Hobby crons are daily-only, so the weekly run is a GitHub Action.
+- Build `components/sections/ImpliedPnL.tsx`: quarters down the rows, line items across (revenue, COGS, gross profit, gross margin, opex, operating income, capex, FCF). Disclosed and modeled values in visibly different treatments. Every number is a `<Metric>` with a methodology tooltip. CSV export whose values match the screen.
+- Admin view to lock periods and override line items with a note.
+
+**Acceptance**: P&L renders; numbers tie; CSV matches on-screen values; tooltips on every cell; COGS and gross margin cells state that they arrive with unit economics; admin can lock and override; a changed assumption recomputes unlocked periods and leaves locked ones alone.
 
 ### 4.10 Financials landing page and ship checkpoint
 
-Build `/financials` as the container (v1 3.5 layout: editorial opening, sticky scroll nav, sections stacked); capex intensity chart (v1 3.3) if data supports it, else defer to Phase 6; deploy; verify; update `architecture.md` and `pre-launch.md`; notify user. The valuation framework (v1 3.4) moves to Phase 8 with the outlook work, where its scenario presets belong.
+**Do**:
+- Build `/app/(public)/financials/page.tsx` as the container: editorial opening with a methodology disclaimer (site_content key, placeholder marked), sticky scroll nav on desktop, sections stacked: Other Bets walk, implied P&L, link to `/earnings`.
+- Capex intensity chart (capex per incremental weekly ride, rolling four quarters) only if the data supports it; otherwise defer to Phase 8 and say so in `architecture.md`.
+- The valuation framework (v1 3.4) stays in Phase 10 with the outlook work.
+- Reads go through `lib/supabase/public.ts`. Add Financials to the nav. Add a `financials` kind to `/api/og/[kind]/[id]` only if the page has a natural id; otherwise leave it for 7.1.
+- Deploy; verify; update `architecture.md` and `pre-launch.md`; notify the owner.
 
-### 4.11 Waymo site roster scraper
+**Acceptance**: `/financials` renders from real data, browser-verified, mobile responsive; nav link live; Phase 4 acceptance criteria re-checked end to end.
 
-**Background**: the failure mode observed in the May-August hiatus is staleness, and the city roster is the most visible thing that rots. Spot-checked 2026-08-16 against waymo.com: membership was exactly right (the 11 serving-rider cities matched the table's 9 public + 2 waitlist), but Nashville's `public_access_date` was wrong by two and a half months, and Los Angeles collapses a waitlist period into a single date.
+### 4.14 Metric vocabulary cleanup
 
-**Constraint found while investigating**: waymo.com sorts cities into only two buckets, "Serving Riders In" and "Up Next". It cannot distinguish `public` from `waitlist`, and it cannot distinguish `employee` from `announced`: Las Vegas, Denver, San Diego and Tampa sit under "Up Next" beside Seattle and Tokyo. This scraper therefore maintains **membership, not status**. Status changes still need a human, sourced from the Waymo blog or the support pages (the Nashville open-to-everyone date came from `support.google.com/waymo`, not the marketing site).
+**Background**: three small schema gaps from the 4.12 audit, bundled because each is a few lines and all touch the same promotion path.
 
 **Do**:
-- robots.txt pre-check first and surface the result before any parser is written, as 4.3 did for Motley Fool.
-- Parse the location lists into the two buckets; match against `cities` by name, recording waymo.com's own key in `external_keys` per the existing convention.
-- Report rather than write: a city entering "Serving Riders In" (arrival), a city disappearing (pause or withdrawal), a city entering "Up Next" (announcement). New cities insert with `status 'announced'` for a human to classify; existing rows are never re-statused automatically.
-- A `sources` row per run.
-- **Distinguish "no changes" from "matched nothing" in the health report.** A parser whose selectors have rotted matches zero cities and looks identical to a quiet week. That single failure mode is what would make this scraper worse than no scraper, and it is the acceptance criterion below.
+- Add a period-total metric slug (for example `annual_trips`, with the period carried in `notes` or a `period` column; surface the shape). This is what lets the Q4 2024 Pichai quote ("more than 4 million passenger trips" during 2024) publish its figure. It sits approved and unpromoted today.
+- Add `mentions_extracted` to `earnings_events` so a public surface can tell "extracted several, approved none" from "extracted none"; update `PRESENCE_COPY` to use it.
+- Decide the two-figures-one-mention limit: the Q4 2025 call quote stated both 20 million cumulative and 400,000 weekly, and one mention holds one metric. Options: allow the reviewer to split a mention, or accept the limit and document it. Surface; do not build before the decision.
 
-**Acceptance**: a dry run against the live page reproduces the current 11-serving / 21-up-next split exactly; a deliberately broken selector reports an error rather than "no changes"; weekly GitHub Action; Slack notification on any bucket change.
+**Acceptance**: migration reviewed and applied; the Q4 2024 mention promotes to the new slug after a human re-approves it; promotion tests extended; no existing `disclosed_metrics` row changes.
 
-### 4.12 Mention vocabulary and the cumulative_trips promotion path
+---
 
-**Background**: surfaced by the fix(4.5) spot-check on 2026-08-16. `mention_type` `ride_count` conflates two different claims: "now providing more than 400,000 rides every week" and "safely serving more than 4 million passenger trips" are both `ride_count`, and `METRIC_PROMOTION` maps that type to `weekly_rides`, forcing the weekly reading on both. That single ambiguity produced both bad rows fix(4.5) corrected: a full-year 2024 total filed as a cumulative figure, and a cumulative sentence left sourcing a weekly figure under Pichai's name.
+## Phase 5: The Desk
 
-Note that the model was right in both cases. `extracted_metric.metric` correctly read `cumulative_trips` on both quotes; only the promotion map overrode it.
+**Ships publicly**: indirectly. The inbox is admin-only; its output is a fresher site.
+
+**Goal**: one place where the owner reviews every new fact in under ten minutes a week, fed by monitors that draft and never publish. The May to August hiatus and the August to September gap both failed the same way: the data went stale because keeping it fresh required opening six admin pages and remembering what to look for. The Desk replaces remembering with a queue.
+
+**Design decisions taken at planning time (2026-09-20)**:
+- **Staging table over per-table draft flags.** Only `milestones` (`is_published`) and `waymo_mentions` (`review_status`) have a draft state. `cities`, `disclosed_metrics`, `competitor_snapshots`, `fleet_snapshots` and `financial_periods` are public on write, and every public query assumes it. Adding a review flag to each would touch every query and RLS policy, and one missed filter would publish unreviewed model output. Monitors therefore write only to `proposed_changes`; approval applies the change to the live table through the same validation the admin forms use.
+- **Auto-approve tiers.** Publish on arrival, no review: CPUC filings (already true today; parsed by code from regulator files) and `waymo.com` roster membership (see 5.4 for exactly what that does and does not cover). Everything else waits: SEC table figures, NHTSA recalls, every model-drafted item. Auto-applied changes still appear in the inbox as an "applied, FYI" strip so the owner sees them, and still flow to the dispatch.
+- **Weekly review, monthly send.** The inbox is worked every Friday or Saturday. A missed week costs a week of site freshness, never a dispatch issue.
+
+### 5.1 Proposed changes: the staging table and apply layer
 
 **Do**:
-- Key promotion off `extracted_metric.metric` rather than `mention_type`, with `mention_type` as the fallback when the model returned no slug.
-- Give `cumulative_trips` a promotion path, and audit the other `disclosed_metrics` slugs for the same gap.
-- Re-validate the 33 backfilled events against the new mapping and report, do not auto-correct: a promotion change touching already-reviewed human decisions needs a diff a human approves.
+- Migration (show SQL first), `proposed_changes`: `id` uuid pk; `target_table` text (whitelist: milestones, cities, disclosed_metrics, competitor_snapshots, fleet_snapshots); `operation` 'insert' | 'update'; `target_id` uuid nullable (required for update); `payload` jsonb (the proposed column values); `company_id` fk; `source_id` fk (required); `quote_text` text (the verbatim passage supporting the change, verified against the stored source before insert); `origin` text (for example `monitor:waymo-blog`, `roster`, `quick-add`); `dispatch_section` text; `status` 'pending' | 'approved' | 'rejected' | 'auto_applied'; `applied_record_id` uuid nullable; `model` text nullable; `reviewed_at`; `created_at`. RLS: no anon access at all. UUID pk, so the audit trigger applies.
+- `lib/desk/apply.ts`: one apply function per whitelisted table. Validates the payload with the same zod shape the admin form uses (extract shared schemas where the forms currently validate inline), writes with `supabaseAdmin`, records `applied_record_id`, revalidates the affected public paths. An update re-reads the target row first and refuses if it changed since the proposal was drafted; a stale proposal is shown as stale, never applied over a newer hand edit.
+- Dedupe on insert: a proposal identical to a pending or previously rejected one (same target, same payload hash, same source URL) is dropped and counted, so a monitor re-reading a feed does not refill the queue with items the owner already rejected.
+- Tests for the apply layer with fixtures: insert, update, stale update refused, whitelist enforced, rejected-duplicate dropped.
 
-**Acceptance**: a cumulative quote promotes to `cumulative_trips` or promotes nothing, never to `weekly_rides`; the fix(4.5) regressions in `scripts/test-promotion.ts` still pass; the re-validation report is reviewed before anything is written.
+**Acceptance**: a hand-inserted proposal for each whitelisted table can be approved into the live table and appears on the public site after revalidation; a proposal against a non-whitelisted table is refused; nothing in `proposed_changes` is readable by anon (extend `scripts/test-rls.ts`).
 
-**Sequencing**: this changes extraction behaviour on a corpus that only grows, so it should land before the next backfill rather than after.
+### 5.2 The unified inbox
 
-(Built 2026-08-20. Promotion now resolves through `resolvePromotionSlug(extracted_metric.metric, mention_type)`: the model's reading of which quantity a quote describes wins, and `mention_type` is consulted only when the model named none. A slug that is valid but has no `disclosed_metrics` home (`revenue_usd`, `operating_loss_usd`, `capex_usd`, pending the Other Bets walk) promotes NOTHING rather than falling back, because falling back would file a revenue figure as weekly rides: the original bug in different clothing.
+**Do**:
+- `/admin/review`: one page listing everything awaiting the owner, grouped by dispatch section: pending `proposed_changes`, earnings events with pending mentions (as one row per event linking to the existing 4.5 queue, which stays the right tool for quote review), and draft milestones. Plus the "applied, FYI" strip for auto-applied changes since the last visit.
+- Each proposal card shows: what would change (a before and after diff for updates), the verbatim quote, a link to the stored source, origin, and age. Actions: approve, edit then approve, reject. Bulk approve within a group.
+- Ergonomics are the module, per principle 6. Keyboard: `j`/`k` to move, `a` approve, `r` reject, `e` edit, `o` open source. No page reload between items. Target: ten typical items cleared in under ten minutes, measured once with the owner during verification.
+- Weekly Slack nudge, Friday morning Pacific: counts per section and a direct link. Repeats weekly while anything is pending; a queue older than three weeks escalates to WARN. Vercel Hobby crons are daily, so the daily health cron checks the weekday.
+- `/admin` dashboard gains a pending-review count.
 
-A worse defect than the background above describes was found while reading the approve path. It did not merely override the model at promotion time, it OVERWROTE the stored evidence: on a successful promotion it replaced `extracted_metric` wholesale with `{metric: METRIC_PROMOTION[mention_type], value, unit: null, period: <event fiscal period>}`, destroying the model's slug, unit and period. So for the four mentions that actually promoted, the record of the model having been right was deleted at the moment it was overruled. Approval now writes back only the reviewer's number and preserves the model's reading, which is treated as evidence on the same footing as `quote_text`.
+**Acceptance**: browser-verified end to end under the `(protected)` layout (this touches routing under the auth gate); an approved proposal is live on the public site within one revalidation; keyboard flow works without a mouse; the Friday nudge fires in a simulated run.
 
-That defect also shapes the re-validation deliverable. `scripts/audit-promotion-mapping.ts` is read-only and splits its output: mentions that never promoted still have an intact `extracted_metric`, so their old-vs-new diff is real; already-promoted mentions cannot be re-derived at all, because the column now holds the old mapping's own answer, and comparing it against the old mapping would report agreement and read as a clean bill of health. Those are listed for manual checking instead. Re-running extraction to recover the original readings was considered and rejected: the model is not deterministic, so it would produce a larger diff that could not be trusted, which is worse than a smaller one that can.
+### 5.3 Industry-wide milestones and the tag vocabulary
 
-`CandidateRow` now carries `metric` and `decidePromotion` filters on it. The caller's query was previously the only thing keeping a `weekly_rides` row out of a `cumulative_trips` decision, which left the tested boundary unable to catch the exact class of mistake this module exists to fix. Found by a test that failed for the right reason.
+**Background**: `milestones` has always had `company_id`, but no public query filters on it and the copy says "Waymo". A competitor milestone entered today would appear unlabeled in the homepage feed. Decision 2026-09-20: the feed becomes industry-wide.
 
-The review queue shows the resolved target on every card ("publishes as cumulative trips", or "publishes no figure", noting when the model's slug differs from the type). Without it a reviewer picks `ride_count`, watches it file as cumulative trips, and has nothing on screen explaining why. Tests: `scripts/test-promotion-slug.ts` (9 new), `scripts/test-promotion.ts` (16, every fix(4.5) regression still passing).
+**Do**:
+- Company chip on `MilestoneCard`; company filter chips on `/milestones` beside the tag chips; the homepage `RecentMilestones` shows the industry feed with chips. Surface one choice: whether the homepage strip weights Waymo (for example at least three of five) or is strictly most-recent.
+- `MILESTONE_TAGS` gains `vehicles` and `regulatory` (no migration; `tags` is `text[]`). Re-tag existing rows where `technology` or `operations` was standing in for either, via an idempotent `scripts/update-*.ts` with a dry-run report.
+- Map tags to dispatch sections in one place (`lib/dispatch/sections.ts`), so the monitor, the inbox grouping, and the generator share one vocabulary.
+- Move `/milestones` and the homepage reads to `lib/supabase/public.ts`, closing the debt item where an admin sees draft milestones on public pages.
+- Update copy that says milestones are Waymo's history (`schema.md`, page intro, glossary).
 
-The audit was run 2026-08-20 over all 162 mentions and found 2 changed, 4 unre-derivable, 156 unchanged. Reviewing it surfaced a latent bug that had nothing to do with slugs: every seeded `disclosed_metrics` row carries `scope 'US'` while promotion writes `'worldwide'`, so `isSameScope` could never match a seed. Promotion therefore always decided insert, collided on the unique (company_id, metric, as_of) index, and the upsert silently overwrote the seed's scope, stated_by, notes and source. It stayed hidden because the four promotions run to date all linked to rows the pipeline itself had created; the Q2 2024 mention is the first to land on a seeded row's date. `COMPANY_WIDE_SCOPES` now treats the two labels as equivalent, with an expiry noted for when Waymo carries riders outside the US. A row already dated to the promoting event also no longer gains a "Reaffirmed in..." note, which would have claimed on a public tooltip that a figure was given twice.
+**Acceptance**: a Zoox milestone renders with its chip on `/milestones` and the homepage; filters work; an admin browsing public pages sees no drafts; no em dashes in any new label.
 
-Outstanding decisions from the audit, both left unapproved deliberately: the Q2 2024 Pichai quote (2,000,000 cumulative trips) is correct and should now link to the seeded 2M row rather than overwrite it. The Q4 2024 Pichai quote (4,000,000) is probably a full-year 2024 total rather than a running total, since the seeded series already holds 5,000,000 as of 2024-12-18; approving it as cumulative would make the series non-monotonic and reinstate the row fix(4.5) removed. `disclosed_metrics` has no annual-total metric, so the honest outcome may be that it publishes nothing.)
+### 5.4 Source check and the roster scraper
+
+**Do, part one: the source check (no code).** For each candidate source, record in a table shown to the owner before any parser is written: robots.txt verdict for our user agent, whether an RSS feed or sitemap exists for discovery, update frequency, and whether pages render without JavaScript. Candidates: Waymo blog, Zoox, Nuro, Pony.ai IR, WeRide IR, Baidu IR, Uber newsroom and IR, NHTSA recalls API, CPUC press and AV program pages, CA DMV permit holder pages. Tesla has no press office and announces on X, which we do not scrape; Tesla news arrives through 5.6. Press outlets are out of scope: copyright exposure, and principle 8 (disclosed sources).
+
+**Do, part two: the roster scraper (v2 4.11, re-homed).** `waymo.com` sorts cities into "Serving Riders In" and "Up Next". It cannot distinguish `public` from `waitlist`, or `employee` from `announced`. The scraper therefore maintains membership, and the owner's 2026-09-20 decision to auto-approve it means exactly this:
+- A city new to "Up Next" is inserted into `cities` as `announced`, auto-applied. That status is the floor and cannot be wrong.
+- A city moving into "Serving Riders In", or disappearing from either list, is auto-recorded as a fact (a `proposed_changes` row with status `auto_applied` that writes a dated milestone: "Waymo lists X under Serving Riders"). The **status change itself** (`public` vs `waitlist`, or `paused`) lands as a pending proposal, because the page does not contain the answer. An existing row is never re-statused automatically.
+- Match by name, recording waymo.com's key in `external_keys`. A `sources` row per run.
+- **Distinguish "no changes" from "matched nothing".** A parser whose selectors have rotted matches zero cities and looks like a quiet week. Zero matches is an error and a Slack WARN.
+
+**Acceptance**: the source table is reviewed by the owner; a dry run reproduces the live "Serving" and "Up Next" split exactly; a deliberately broken selector reports an error, never "no changes"; weekly GitHub Action; bucket changes reach the inbox as specified above.
+
+### 5.5 The news monitor
+
+**Do**:
+- `lib/monitor/`: per-source discovery from the feed or sitemap found in 5.4 (never by guessing URLs; the fool.com 429 rule), new items only (dedupe on URL and `content_hash`), raw page to Storage, standard etiquette.
+- Extraction reuses `lib/extraction/`: the `ModelCaller` seam, forced tool use, per-item validation with shape repair, `verifyQuote`, the drop log, per-run cost in Slack. New schema: each item is a development with `company`, `event_date`, `headline`, `summary`, `tags`, a verbatim `quote_text`, and an optional structured change (a city status, a disclosed metric, a fleet figure) expressed as a `proposed_changes` payload. Do not modify `lib/extraction/text.ts` passage derivation: the 4.5 source viewer re-derives passage ids from it.
+- **Materiality filter.** A newsroom publishes hiring posts and rider stories. The prompt defines a development (a market opening or status change, a disclosed figure, a vehicle or platform event, a permit, recall or probe, a partnership with operational effect, a financing) and the model returns nothing for the rest. Expect tuning: log every skipped item's title and the reason, reviewable from the inbox, so a wrongly skipped post is findable.
+- One development drafts one milestone proposal, plus a structured proposal when the post states one. The two are linked so approving the city change and its milestone is one action.
+- **Rot detection per source**: a feed that returns nothing parseable, or no new items for longer than its observed cadence allows, is a Slack WARN. Green no-ops are the failure this project has already had twice.
+- GitHub Action, daily. The monitor never writes to a live table.
+
+**Acceptance**: a backfill over the prior 30 days of the Waymo blog produces proposals the owner judges mostly material (measure: fraction approved; record it, and tune if under half); every proposal's quote verifies against its stored source; a dead feed WARNs; per-run cost appears in Slack; nothing reaches a public page without approval.
+
+### 5.6 Quick-add by URL
+
+**Do**: a field on `/admin/review`: paste a URL, the server fetches that one page (robots.txt respected), stores it, runs the 5.5 extraction on it, and the result lands in the inbox like any other proposal with origin `quick-add`. This is the path for Tesla, for press-reported facts (which carry `disclosure_quality 'press_reported'` and never drive headline surfaces), and for anything the source list misses. If the fetch is blocked, the form falls back to manual entry of headline, date, quote, and source URL.
+
+**Acceptance**: a pasted Waymo blog URL yields a reviewable proposal in under a minute; a blocked URL degrades to the manual form.
+
+### 5.7 Ship checkpoint
+
+Deploy; two consecutive weekly reviews completed by the owner using only the inbox; update `architecture.md`, `schema.md`, `pre-launch.md`; record inbox timing and monitor approval rate in `build-log.md`.
 
 ---
 
-## Phase 5: Launch
+## Phase 6: Dispatch
 
-**Ships publicly**: this phase IS the announcement.
+**Ships publicly**: yes (deployed; announcement held for Phase 7).
 
-**Goal**: flip the site from unlisted to public and announce it, with everything a first-wave visitor or crawler touches in order.
+**Goal**: a visitor can subscribe; once a month the site assembles, the owner previews, and subscribers receive a sourced record of what changed. Every issue lives permanently at `/dispatch`.
 
-### 5.1 Indexing infrastructure
+**Cadence (decided 2026-09-20)**: monthly, first weekend, plus event-triggered specials for an Alphabet earnings call and a CPUC quarter landing. Quiet months still send; sections with nothing new say why in a derived line.
 
-**Do**: sitemap.xml, robots.txt, per-section OG images via Vercel OG (landing, landscape, financials, earnings, milestones, methodology), Schema.org markup (Article on editorial sections, Dataset on data sections), page titles and meta descriptions per v1 8.1 keyword targets plus landscape terms ("robotaxi comparison", "Zoox vs Waymo", "AV deployment tracker").
+### 6.1 Domain and sending identity
 
-### 5.2 Domain and auth
+**Background**: pulled forward from v2 5.2. Resend requires a verified sending domain (SPF, DKIM), so the custom domain can no longer wait for launch week.
 
-**Do**: the `pre-launch.md` checklist items: custom domain in Vercel plus DNS (user provides the domain; surface if none chosen), Supabase Auth Site URL and redirect allowlist update, magic-link retest against the new domain, methodology contact email swap (or user approves keeping the gmail).
+**Do**: owner chooses and registers the domain (open decision 1); Vercel domain and DNS; `NEXT_PUBLIC_SITE_URL`; Supabase Auth Site URL and redirect allowlist; magic-link retest against the new domain in a real browser; Resend domain verification; a project-domain contact address replacing the gmail in `methodology_body` if the owner wants one. The `SITE_PUBLIC` gate stays closed.
 
-### 5.3 Final freshness and correctness pass
+**Acceptance**: site serves on the custom domain, still noindexed; admin login works end to end; a Resend test email from the domain passes SPF and DKIM.
 
-**Do**: verify latest CPUC quarter present; every landscape snapshot as-of within a quarter; implied P&L reflects the latest reported Alphabet quarter; run the full pre-launch checklist; Lighthouse pass (95+ performance, 100 accessibility per v1 8.4); one Playwright smoke test per public route if not already present.
+### 6.2 Subscribers
 
-### 5.4 Flip and announce
+**Do**:
+- Migration (show SQL first), `subscribers`: `id` uuid pk, `email` citext unique, `status` 'pending' | 'confirmed' | 'unsubscribed' | 'bounced', `confirm_token`, `unsubscribe_token`, `confirmed_at`, `unsubscribed_at`, `source_path` (which page the signup came from), `created_at`. RLS: no anon access; all writes through server actions with `supabaseAdmin`. This is the first table holding personal data; say so in `schema.md`.
+- Subscribe form: footer and `/dispatch`. Copy states the cadence and that issues are AI-assembled from reviewed data. Honeypot field and a per-IP rate limit; no CAPTCHA unless abuse appears.
+- Double opt-in: confirmation email via Resend, tokenized confirm route, tokenized one-click unsubscribe route, `List-Unsubscribe` and `List-Unsubscribe-Post` headers on every send. Unsubscribe never requires login and takes effect immediately.
+- CAN-SPAM: every email carries a physical mailing address. The owner provides one (open decision 2); do not ship sends without it.
+- Admin: `/admin/subscribers` with counts by status and a CSV export. No individual open tracking surfaced per person.
+- Privacy paragraph added to `/methodology` (what is collected, that it is never sold, how to leave).
 
-**Do**: set `SITE_PUBLIC=true` in Vercel production, redeploy, verify noindex headers gone and meta robots removed; submit sitemap to Google Search Console; user announces (LinkedIn/Substack content moments are the user's to write; offer drafts). Post-announce monitoring for the first week: watch Slack for scraper failures and Vercel logs for errors.
+**Acceptance**: browser-verified signup, confirm, and unsubscribe flows; an unconfirmed address never receives a dispatch; anon cannot read the table (extend `scripts/test-rls.ts`).
 
-**Acceptance**: site indexed, announcement out, no stale data visible on day one.
+### 6.3 The generator
+
+**Do**:
+- Migration (show SQL first), `dispatch_issues`: `id`, `issue_number`, `slug`, `kind` 'monthly' | 'special', `period_start`, `period_end`, `status` 'draft' | 'approved' | 'sent', `title`, `facts` jsonb (the structured payload), `body_markdown`, `model`, `tokens_in`, `tokens_out`, `generated_at`, `sent_at`, `recipient_count`. Anon reads `sent` issues only.
+- **Collector (`lib/dispatch/collect.ts`, deterministic, no model).** Builds the facts payload for a window from: `audit_log` inserts and updates on `cities`, `disclosed_metrics`, `competitor_snapshots`, `fleet_snapshots`, `milestones`, `financial_periods`, `ride_estimates`; `waymo_mentions` approved in the window (the earnings tables are not on the audit trigger, so this reads `reviewed_at` or equivalent; add the column in this migration if absent); and calendar math for the closing section. Each fact carries its row id, its source URL, and its public permalink. Edits that change no public-facing value are dropped. An update that corrects a previously published value is classified as a correction.
+- **Sections, fixed order**: New markets; New data; Earnings; Vehicles and fleet; Regulatory and safety; Corrections (omitted when empty; the only section that is); What to watch. An empty section renders a derived line ("No Alphabet earnings this month. Q3 results are expected in late October."), consistent with how `/earnings` treats silence. Expected earnings dates need a source: surface whether a small hand-maintained `lib/earnings-calendar.ts` is acceptable (open decision 3).
+- **Writer.** Numbers, names, dates and links are templated from the payload. The model writes one short framing paragraph per non-empty section and a two-sentence opening, given only that section's facts. Tone: dispatch, flat and specific, no thesis. No em dashes (validated, since this is programmatically generated copy).
+- **Fidelity check (principle 11).** After generation, every number, company name, city name and date in the model's prose must match a value in the facts payload. A failure regenerates once, then falls back to the templated lines alone and flags the issue in the preview. Unit tested with an injected fake model, the 4.4 pattern.
+- Every issue carries a standing line: assembled by a model from data the editor reviewed, with a link to the methodology, and the footer legal disclaimer.
+- **Preview and send.** `/admin/dispatch`: drafts list; an issue preview rendering exactly what subscribers get; the prose is editable, the templated facts are not (fix the data, then regenerate). "Send" is a deliberate click, never automatic. Sending runs as a GitHub Actions dispatch in batches through Resend, not inside a Vercel function, per the long-admin-work convention. A send is idempotent per (issue, subscriber).
+- **Triggers.** First Saturday of the month: draft generated, Slack message with the preview link. Specials: when an Alphabet call event flips to `reviewed`, or a new CPUC quarter lands, Slack offers a one-click special draft; nothing drafts or sends on its own.
+
+**Acceptance**: a draft for a real past window contains only facts present in the database, each linked; the fidelity check rejects a fixture with an invented number; an empty month produces a complete, honest issue; a test send reaches a seed list of the owner's addresses with working unsubscribe; per-issue cost logged.
+
+### 6.4 The archive
+
+**Do**: `/dispatch` (issues newest first, subscribe form on top) and `/dispatch/[slug]` (the issue, same content as the email, with sources linked and a permalink per section). ISR, reads through `lib/supabase/public.ts`, sent issues only. Add a `dispatch` kind to `/api/og/[kind]/[id]`. RSS at `/dispatch/feed.xml` (this audience uses readers). Nav link. A one-line latest-issue pointer on the homepage; surface the placement before building.
+
+**Acceptance**: browser-verified; drafts are not reachable by anon at any URL; OG card renders for an issue; feed validates.
+
+### 6.5 Analytics
+
+**Do**:
+- `@vercel/analytics` in the root layout. Cookieless, so no consent banner. Before building on custom events (subscribe conversions), check the current Hobby-tier event limits and whether custom events need Pro; surface the finding. Note for the ledger: Vercel Hobby is for non-commercial use, which matters the day the dispatch or the site is monetized.
+- Resend webhooks (delivered, opened, clicked, bounced, complained) into an aggregate per issue on `dispatch_issues`; bounces and complaints update `subscribers.status`. Aggregates only.
+- `/admin` tiles: confirmed subscribers, net change over 30 days, last issue's open and click rate, top signup source path.
+
+**Acceptance**: a page view and a test subscribe appear in Vercel Analytics; a test send's delivery and open appear on the issue; a simulated bounce flips the subscriber's status.
+
+### 6.6 Back issues and ship checkpoint
+
+**Do**: generate issues for the completed months since the August resumption from real `audit_log` history, each labeled as assembled retrospectively on its actual generation date. The owner reviews and publishes them to the archive without sending. Send issue one to the seed list. Deploy; update `architecture.md`, `schema.md`, `pre-launch.md`.
+
+**Acceptance**: at least two issues in the archive (announce bar item d); seed-list send verified in a real inbox, including the unsubscribe link and the mailing address.
 
 ---
 
-## Phases 6-8: Post-announce roadmap
+## Phase 7: Launch
 
-Specified at heading level only; each gets a detailed module breakdown at phase start, using the v1 text as the base reference.
+**Ships publicly**: this phase is the announcement.
 
-**Phase 6: Unit economics** (v1 Phase 2, upgraded). The assumptions table, cost-per-mile waterfall, revenue per ride, interactive calculator with shareable URL state, city breakeven. Upgrade opportunity since v1: real disclosed anchors now exist for the model (Pony's claimed per-vehicle breakeven and 1/4-to-1/5 vehicle cost, Apollo Go's $28K RT6, WeRide's $40-50K per-vehicle annual service revenue projection), so the calculator can offer "Waymo baseline" and "China cost structure" presets. On completion, wire the COGS decomposition into the implied P&L (closing the Phase 4 simplification).
+### 7.1 Indexing infrastructure
 
-**Phase 7: Safety** (v1 Phase 6). CPUC `incident_metrics` ingestion via the existing scraper, NHTSA SGO monthly scrape (now covering Waymo, Zoox, and Tesla incidents: comparative safety is now possible and is the section's editorial hook), CA DMV disengagement reports, safety dashboard with human-baseline comparisons and transparent methodology critique. The recall histories (Waymo's six, Zoox's four, Tesla's investigation) become a maintained timeline.
+sitemap.xml (including `/dispatch` issues and `/earnings` permalinks), robots.txt, per-section OG images by adding kinds to `/api/og/[kind]/[id]` (landing, landscape, financials, milestones, methodology), Schema.org markup (Article on editorial sections and dispatch issues, Dataset on data sections), titles and meta descriptions per v1 8.1 keyword targets plus landscape terms ("robotaxi comparison", "Zoox vs Waymo", "AV deployment tracker"). Confirm one OG card in a real share debugger; it has never been rendered by a deployment.
 
-**Phase 8: Outlook, valuation, polish** (v1 Phases 7 and 8 remainder). Bull/bear cases with explicit probabilities, valuation framework and scenario builder (moved from Phase 4), share-this-chart PNG generation, email capture, methodology changelog.
+### 7.2 Final freshness and correctness pass
+
+Latest CPUC quarter present; every landscape snapshot as-of within a quarter; implied P&L reflects the latest reported Alphabet quarter; the inbox is empty; the latest dispatch is under five weeks old; placeholder copy sweep (`// TODO: user to replace` and every seeded `site_content` key); the full `pre-launch.md` checklist; Lighthouse (95+ performance, 100 accessibility); one Playwright smoke test per public route.
+
+### 7.3 Flip and announce
+
+`SITE_PUBLIC=true` in Vercel production; redeploy; verify noindex headers and meta robots are gone; submit the sitemap to Google Search Console. The owner announces (LinkedIn and Alpha Work are the owner's to write; offer drafts), with the subscribe form as the call to action. First-week monitoring: Slack for scraper and monitor failures, Vercel logs, signup and confirmation rates, Resend bounce and complaint rates.
+
+**Acceptance**: site indexed, announcement out, no stale data visible on day one, subscribe flow healthy under real traffic.
 
 ---
 
-## Decisions log and open decisions
+## Phases 8 to 10: Post-announce roadmap
 
-Decided 2026-08-15 (Phase 4): extraction stays on the Anthropic API for now. Open-weight alternatives were reviewed via OpenRouter (DeepSeek V4 Flash at roughly 40x lower input cost, GLM 5.2 as the stronger fallback); the `ModelCaller` interface in `lib/extraction/extract.ts` is the seam for adding an OpenRouter caller and A/B-ing on the same event if cost or independence ever matters. At about $1.50 for the full backfill it does not yet.
+Heading level only; each gets a full module breakdown at phase start, written into this document (not deferred to v1 text).
 
-Decided 2026-08-15: CPUC series stays, scraper rebuilt against cpuc.ca.gov directly (2.2). National disclosed-metrics time series built in Phase 2 (2.3), not deferred to Phase 4.
+**Phase 8: Unit economics.** Assumptions table (extending 4.9's `model_assumptions`), cost-per-mile waterfall, revenue per ride, interactive calculator with shareable URL state and "Waymo baseline" and "China cost structure" presets (Pony's claimed per-vehicle breakeven, Apollo Go's RT6 cost, WeRide's per-vehicle revenue projection as disclosed anchors), city breakeven. On completion, wire COGS into the implied P&L, closing the Phase 4 simplification.
 
-Open (surface before or during the named module):
+**Phase 9: Safety.** CPUC `incident_metrics` ingestion, NHTSA SGO monthly scrape (Waymo, Zoox, Tesla: comparative safety is the editorial hook), CA DMV disengagement reports, dashboard with human-baseline comparisons and methodology critique, maintained recall timeline. NHTSA recalls already arrive as milestones through the Phase 5 monitor; this phase adds the structured series.
 
-1. **City status enum** for employee-only driverless markets (2.4): new status value vs. mapping. Recommendation: new 'employee' value.
-2. **Announced-cities inclusion policy** (2.4): full announced list vs. only dated/operating markets. Recommendation: only dated/operating.
-3. ~~Operator roster~~ Decided 2026-08-15: include minor operators; Nuro/Lucid/Uber elevated to first-class with role modeling (see 3.1).
-4. **Landscape map approach** (3.3): extend CoverageMap vs. separate lighter component.
-5. ~~Extraction model~~ Decided 2026-08-15: `claude-sonnet-5`.
-6. ~~Transcript source~~ Resolved 2026-08-15: Motley Fool robots-permitted and accessible; scraper built against it (4.3).
-7. **Custom domain** (5.2): needs a decision and registrar access before Phase 5.
-8. ~~Zoox CPUC pilot data availability~~ Resolved 2026-08-15: Zoox files the CPUC template as an xlsx inside the pilot zip (Month-Level sheet, same columns); scraper reads it directly. Aurora/Tensor/WeRide pilot filings are non-template and out of scope.
+**Phase 10: Outlook, valuation, polish.** Bull and bear cases with explicit probabilities, valuation framework and scenario builder, share-this-chart PNG generation, methodology changelog. (Email capture, formerly here, shipped in Phase 6.)
+
+---
+
+## Decisions log
+
+Decided 2026-09-20 (v3 planning):
+- Dispatch lives on the site; Substack rejected (see "What changed").
+- Review gate: one unified inbox, weekly; approval publishes and queues for dispatch.
+- Staging table (`proposed_changes`) over per-table draft flags.
+- Auto-approve: CPUC filings and `waymo.com` roster membership only. SEC table figures and NHTSA recalls wait for review.
+- News: model-assisted monitor over first-party sources, plus quick-add by URL.
+- Cadence: monthly plus specials for Alphabet calls and CPUC quarters.
+- Email provider: Resend. Analytics: Vercel Web Analytics.
+- Milestones feed: industry-wide.
+- `build-log.md` split adopted; the August briefing archived as `briefing-2026-08.md`.
+- The uncommitted 4.12 wrap-up ships in the v3 commit.
+
+Carried from v2 (all resolved): CPUC series kept and scraper rebuilt direct; national disclosed-metrics series in Phase 2; 'employee' city status added (0009); announced cities included only where dated or operating; landscape map built as a separate lighter component (`OperatorMap`); minor operators included, Nuro/Lucid/Uber modeled with roles; extraction model `claude-sonnet-5`, Anthropic API retained with `ModelCaller` as the seam for alternatives; Motley Fool as transcript source; Zoox CPUC pilot data ingested from xlsx.
+
+## Open decisions
+
+1. **Custom domain** (6.1): needed before any email sends. Owner chooses and registers.
+2. **Mailing address for CAN-SPAM** (6.2): a PO box or registered-agent address; owner provides.
+3. **Expected earnings dates** (6.3): hand-maintained calendar file vs. deriving from prior-year dates.
+4. **Homepage milestones weighting** (5.3): Waymo-weighted vs. strictly most-recent.
+5. **`financial_periods` segment column** (4.8): column vs. convention. Recommendation: column.
+6. **Rides between disclosures** (4.9): step, linear, or CPUC-shaped interpolation.
+7. **Two figures in one mention** (4.14): allow splitting vs. document the limit.
+8. **Recurring IR transcript fallback** (4.13): build a parser for abc.xyz vs. manual ingest when Fool skips a quarter.
+9. **Employer and compliance check** (before 7.3): the owner holds a Series 65 and works at a corporate venture arm; a public, recurring, AI-assembled publication about investable companies is worth one conversation about outside-activity policy and disclaimer wording before the announcement. Owner's call.
 
 ## Cross-cutting requirements
 
-Carried over from v1 unchanged: no em dashes anywhere (including this document, UI strings, and commit messages); ISR with on-demand revalidation on admin writes; scraper etiquette (robots.txt, `SCRAPER_USER_AGENT`, 2-second delays, raw documents to Storage, `pending_review` for scraped data); the footer legal disclaimer; WCAG AA accessibility; testing expectations per v1 (fixture-based scraper tests, smoke tests per route, don't over-invest early).
+Carried over unchanged: no em dashes anywhere (this document, UI strings, generated dispatch copy, emails, commit messages); ISR with on-demand revalidation on admin writes; scraper etiquette (robots.txt, `SCRAPER_USER_AGENT`, 2-second delays, raw documents to Storage); the footer legal disclaimer (also on every dispatch email); WCAG AA; fixture-based tests for scrapers, monitors, and the generator; smoke tests per route.
 
-Working agreement carried over from `CLAUDE.md` unchanged: module by module, no chaining, commit per module, show migrations and non-trivial component structures before building, browser verification for anything touching auth or routing, flag rather than deviate, never fabricate data (UNVERIFIED briefing items stay out of the database), architecture.md maintenance block every module.
+Amended: "new scraped data lands as `pending_review`" now reads: model-drafted and unreviewed material lands in `proposed_changes` (or `waymo_mentions` pending) and is never public until approved; regulator files parsed by code and roster membership publish on arrival, per the auto-approve tiers in Phase 5.
+
+Working agreement per `CLAUDE.md`, unchanged: module by module, no chaining, commit per module, show migrations and non-trivial component structures before building, browser verification for anything touching auth or routing, flag rather than deviate, never fabricate data, `architecture.md` maintenance block every module. Added: build narrative is appended to `build-log.md` in the same commit; this file changes only when scope, sequence, or a decision changes.
 
 ## Effort estimate
 
-| Phase | Scope | Effort (weekends) | Public ship |
-|---|---|---|---|
-| 2 | Re-entry and freshness | 2-3 | Deploy only |
-| 3 | Competitive landscape | 3-4 | Deploy only |
-| 4 | Financials + extraction engine | 4-5 | Deploy only |
-| 5 | Launch | 1 | Announcement |
-| 6 | Unit economics | 3 | Yes |
-| 7 | Safety | 2 | Yes |
-| 8 | Outlook, valuation, polish | 2-3 | Yes |
+| Phase | Scope | Effort (weekends) |
+|---|---|---|
+| 0 | Section 0 housekeeping and catch-up | 0.5 |
+| 4 (rest) | 4.13, 4.8, 4.9, 4.10, 4.14 | 2 to 3 |
+| 5 | The Desk | 2 to 3 |
+| 6 | Dispatch | 2 to 3 |
+| 7 | Launch | 1 |
+| 8 | Unit economics | 3 |
+| 9 | Safety | 2 |
+| 10 | Outlook, valuation, polish | 2 to 3 |
 
-Roughly 8-11 weekends to announcement at an opportunistic pace. The automation investment in Phase 4 is what makes the opportunistic pace survivable: after Phase 5, a month away from the project should cost freshness in exactly one place (manual disclosed-metrics entries), not everywhere.
+Roughly 8 to 10 weekends to announcement. v2 estimated 8 to 11 from mid-August and the first three phases consumed about that in elapsed sessions, so treat this as a floor. The trade v3 makes: two more phases before launch, in exchange for a site that stays fresh on ten minutes a week and an audience that hears about it monthly.
 
-## How Claude Code should work through this plan
+## How Claude should work through this plan
 
-Read `CLAUDE.md`, `architecture.md`, and this document in full before starting any phase. Work module by module. After each module: summarize what was built, update `architecture.md` in the same commit, propose the commit message, wait for approval. Do not chain modules. Phase 2.1's audit findings may amend this plan; the plan changes through the user, not silently. When a briefing fact is about to enter the database, re-verify it against the primary source first; the briefing is a map, not the territory.
+Read `CLAUDE.md`, `architecture.md`, `schema.md`, and this document before starting any module; read the relevant `build-log.md` entries before changing anything a finished module built. Work module by module. After each: summarize, update `architecture.md` and `build-log.md` in the same commit, propose the commit message, wait for approval. Do not chain modules. The plan changes through the owner, never silently.

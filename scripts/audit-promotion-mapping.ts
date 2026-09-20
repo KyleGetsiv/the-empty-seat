@@ -161,7 +161,14 @@ async function main() {
   if (showAll && unchanged.length) console.log(`\n${unchanged.join("\n\n")}`);
   else console.log("Re-run with --all to list them.");
 
-  await reportDisclosedMetricHealth();
+  // Which disclosed_metrics rows an approved mention actually stands behind.
+  const cited = new Set(
+    rows
+      .filter((r) => (r as Record<string, unknown>).review_status === "approved")
+      .map((r) => (r as Record<string, unknown>).disclosed_metric_id as string | null)
+      .filter((id): id is string => Boolean(id))
+  );
+  await reportDisclosedMetricHealth(cited);
 
   console.log("\nNothing was written. Correct anything above through the review queue.");
 }
@@ -169,7 +176,7 @@ async function main() {
 // The failure promotion is meant to avoid is a second row for a figure that
 // already exists. Checking the target table directly is cheaper than trusting
 // that the matching logic behaved.
-async function reportDisclosedMetricHealth() {
+async function reportDisclosedMetricHealth(cited: Set<string>) {
   const { data, error } = await db
     .from("disclosed_metrics")
     .select("id, metric, value, as_of, scope, attribution")
@@ -192,8 +199,40 @@ async function reportDisclosedMetricHealth() {
 
   console.log(`\n\nDISCLOSED_METRICS HEALTH: ${rows.length} rows`);
   console.log(`Scope labels in use: ${scopes.join(", ")}`);
+
+  const byMetric = new Map<string, number>();
+  for (const r of rows) byMetric.set(r.metric, (byMetric.get(r.metric) ?? 0) + 1);
+  console.log(
+    `By metric: ${[...byMetric.entries()].sort().map(([m, n]) => `${m} ${n}`).join(", ")}`
+  );
+
+  // The seed script writes scope 'US'; promotion writes 'worldwide'. Listing
+  // the non-seed rows is the cheapest way to account for every row the
+  // pipeline or a human added, which is how fix(4.5)'s orphaned cities_count
+  // row went unnoticed until it was rendering publicly.
+  const notSeeded = rows.filter((r) => (r.scope ?? "").toLowerCase() !== "us");
+  console.log(`\nRows not written by the seed script: ${notSeeded.length}`);
+  for (const r of notSeeded) {
+    console.log(`  ${r.metric} ${r.value}  ${r.as_of}  scope=${r.scope ?? "null"}  ${r.attribution}`);
+  }
+  // A pipeline-written row that no approved mention cites is an orphan: a
+  // company-attributed figure on public record with nothing standing behind
+  // it. fix(4.5) added withdrawPromotion so this stops HAPPENING, but never
+  // removed the row that revealed the bug, and nothing since has looked.
+  const orphans = notSeeded.filter((r) => !cited.has(r.id));
+  if (orphans.length === 0) {
+    console.log("Every non-seed row is cited by an approved mention.");
+  } else {
+    console.log(`\nORPHANS: ${orphans.length} non-seed row(s) with NO approved mention citing them.`);
+    console.log("A company-attributed figure with nothing behind it. Re-cite it by approving a");
+    console.log("mention that states it, or delete it in /admin/disclosed-metrics.");
+    for (const r of orphans) {
+      console.log(`  ${r.metric} ${r.value}  ${r.as_of}  ${r.id}`);
+    }
+  }
+
   if (dupes.length === 0) {
-    console.log("No duplicate (metric, value) pairs. Promotion linked rather than inserted.");
+    console.log("\nNo duplicate (metric, value) pairs. Promotion linked rather than inserted.");
     return;
   }
   console.log(`DUPLICATE (metric, value) PAIRS: ${dupes.length}. Promotion may have inserted over a seed.`);

@@ -41,7 +41,7 @@ context.
   `metadataBase` (app/layout.tsx) falls back to Vercel's production
   host, so social cards and canonical URLs will point at the
   `.vercel.app` domain until this is set. Added 4.6b, pairs with the
-  domain swap in 5.2.
+  domain swap in 6.1 (dev plan v3).
 - [ ] **Duplicate SCRAPER_USER_AGENT in `.env.local`.** The key is
   defined twice (lines 7 and 17). Whichever the parser reads last
   wins, so the user agent actually sent to SEC EDGAR may not be the
@@ -77,6 +77,22 @@ context.
   `npx tsx scripts/fix-city-dates.ts [--apply]`. Phoenix, Austin and Atlanta
   legitimately share both dates and are left alone. Added 2026-08-16 from the
   waymo.com roster spot-check; corrected the same week.
+
+- [ ] **Subscribe path and two archived issues.** Announce bar item (d)
+  in dev plan v3: signup, confirm and unsubscribe verified in a real
+  inbox; at least two issues live at `/dispatch`. Added 2026-09-20.
+- [ ] **CAN-SPAM mailing address.** Every dispatch email must carry a
+  physical address; owner to provide (PO box or registered agent) before
+  any send, module 6.2. Added 2026-09-20.
+- [ ] **Resend sending domain verified** (SPF, DKIM) on the custom
+  domain, module 6.1. Added 2026-09-20.
+- [ ] **Outside-activity and disclaimer check.** One conversation about
+  employer policy and disclaimer wording before announcing a recurring
+  public publication about investable companies. Owner's call; dev plan
+  v3 open decision 9. Added 2026-09-20.
+- [ ] **Vercel plan check.** Hobby is non-commercial and has analytics
+  event limits; confirm both still fit before launch, module 6.5. Added
+  2026-09-20.
 
 ## Open
 

@@ -101,7 +101,7 @@ cascade to a child dynamic route (4.6a).
 | /admin/programs | CRUD with company x role checkbox matrix (roles replaced wholesale on save) |
 | /admin/site-content, /admin/site-content/[key] | list + create key; edit (upsert) |
 | /api/cron/scraper-health | daily Slack freshness report (deployment quarters, pilot rows, pending, overdue) |
-| /api/og/[kind]/[id] (4.6b) | social card renderer. Takes an id, never card text: a free-text endpoint would let anyone stamp arbitrary words on the site's branding, unfixable once share URLs circulate. Node runtime (fs reads the fonts). 5.1 adds a `kind`, not a caller |
+| /api/og/[kind]/[id] (4.6b) | social card renderer. Takes an id, never card text: a free-text endpoint would let anyone stamp arbitrary words on the site's branding, unfixable once share URLs circulate. Node runtime (fs reads the fonts). 6.4 and 7.1 add a `kind`, not a caller |
 
 ---
 
@@ -253,7 +253,7 @@ cascade to a child dynamic route (4.6a).
 - **cpuc-calendar.ts:** pure filing-calendar logic (deadlines May 1/Aug 1/
   Nov 1/Feb 1, overdue-with-grace, label parsing); dependency-free.
   Scraper and extraction internals (why each parser looks the way it does)
-  live in the dev-plan "(Built ...)" notes; these bullets say what exists.
+  live in `build-log.md`; these bullets say what exists.
 - **scrapers/cpuc.ts:** `runCpucScrape()` over cpuc.ca.gov quarterly zips.
   Deployment tier (2.2) upserts Waymo ride_estimates, restatements in
   place, Slack WARN past grace; pilot tier (3.4) writes per-program rows
@@ -470,16 +470,22 @@ cascade to a child dynamic route (4.6a).
   Baidu/Pony Q2 snapshot refresh, OVERDUE since their 2026-08-18
   earnings; no GITHUB_DISPATCH_TOKEN, so reprocess stays disabled;
   duplicate SCRAPER_USER_AGENT in .env.local (see pre-launch.md).
-- Two mentions await a decision from the 4.12 audit. Q2 2024 (Pichai,
-  2,000,000 cumulative trips) is correct and should link to the seeded 2M row
-  now that scope matching works. Q4 2024 (Pichai, 4,000,000) is probably a
-  full-year 2024 total, not a running total: the seeded series already holds
-  5,000,000 as of 2024-12-18, so publishing 4M in Feb 2025 would make
-  cumulative_trips non-monotonic and reinstate the row fix(4.5) removed. Read
-  the full quote before approving; the honest outcome may be that it
-  publishes nothing until an annual-total metric exists.
+- `cities_count 11 @ 2026-04-29` is an ORPHAN: pipeline-written,
+  company-attributed, cited by no approved mention. It is the row the
+  fix(4.5) comment in earnings-promote.ts is named after. That fix added
+  `withdrawPromotion` so orphans stop being created but never removed this
+  one, and nothing looked again until the 4.12 audit counted rows. Harmless
+  today only because nothing renders `cities_count` (only `weekly_rides` is
+  consumed, by NationalTrajectory), so it becomes visible the moment anything
+  does. Decide by opening the Q1 2026 call: re-cite it by approving a mention
+  that states 11 cities, or delete it. Note the site's own city roster read
+  11 serving-rider cities in August 2026, so 11 in April 2026 may be early.
+  `scripts/audit-promotion-mapping.ts` now reports orphans on every run.
 - `disclosed_metrics` has no annual-total metric, so a full-year figure has
-  nowhere correct to go and is either dropped or misfiled as cumulative.
+  nowhere correct to go. The Q4 2024 Pichai quote ("more than 4 million
+  passenger trips" for 2024) sits approved and unpromoted for this reason;
+  the model chose `cumulative_trips` only because no period-total slug
+  exists. Adding one is what would let that figure publish.
 - One mention holds one metric, so a quote stating two figures publishes at
   most one. The Q4 2025 call ("surpassed 20 million fully autonomous trips
   and are now providing more than 400,000 rides every week") published the
@@ -501,20 +507,21 @@ cascade to a child dynamic route (4.6a).
   already charts the disclosed arc from `disclosed_metrics`.
 - `metadataBase` (app/layout.tsx) falls back to Vercel's production host, so
   canonical and card URLs point at `.vercel.app` until `NEXT_PUBLIC_SITE_URL`
-  is set with the custom domain in 5.2. Tracked in pre-launch.md.
+  is set with the custom domain in 6.1 (v3). Tracked in pre-launch.md.
 - The OG card has never been rendered by a real deployment; it is verified
   only by offline font parsing and headline unit tests. Confirm one card in a
-  share debugger before the 5.4 announcement.
+  share debugger before the 7.3 announcement (v3).
 - No extracted-mention total on `earnings_events` (only `extraction_chunks`
   and `mentions_dropped`), and anon sees approved mentions only, so the page
   cannot tell "extracted several, approved none" from "extracted none".
   `PRESENCE_COPY.no_approved_mentions` is true either way; a
-  `mentions_extracted` column would let it say which. Belongs with 4.12.
+  `mentions_extracted` column would let it say which. Scheduled as 4.14.
 - `is_published` DB-level ISR trigger not wired; city detail pages not
   built; `service_area_geojson` unused. `audit_trigger_fn` hard-coded to
   `NEW.id`; non-UUID PK tables excluded.
-- Planned routes not yet built: /financials, /safety, /outlook,
-  /unit-economics. Pre-2025 CPUC baseline and CPUC
+- Planned routes not yet built: /financials, /dispatch, /safety,
+  /outlook, /unit-economics; admin /admin/review, /admin/dispatch,
+  /admin/subscribers (dev plan v3, Phases 5 and 6). Pre-2025 CPUC baseline and CPUC
   incident_metrics not ingested (later phases).
 
 ---

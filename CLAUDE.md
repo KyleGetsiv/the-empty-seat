@@ -4,7 +4,7 @@ Project memory for Claude Code. Read this at the start of every session, before 
 
 ## Project
 
-**The Empty Seat** is a research-grade website tracking autonomous vehicle deployment, Waymo-deep with a competitive landscape around it, targeting growth investors and AV operators. The build specification is `dev-plan.md` (v2, adopted August 2026); the living repo snapshot is `architecture.md`, with per-table schema detail in `schema.md`. Read all four at session start.
+**The Empty Seat** is a research-grade website tracking autonomous vehicle deployment, Waymo-deep with a competitive landscape around it, targeting growth investors and AV operators. The build specification is `dev-plan.md` (v3, adopted 2026-09-20); the living repo snapshot is `architecture.md`, with per-table schema detail in `schema.md`; `build-log.md` records how each finished module got built and why. Read the first four at session start, and the relevant `build-log.md` entries before changing anything a finished module built.
 
 The tone is editorial research, not product marketing. Think "essay you can live inside" rather than "dashboard." Restrained typography, generous whitespace, serif display headlines, narrative around every chart.
 
@@ -18,6 +18,8 @@ The tone is editorial research, not product marketing. Think "essay you can live
 - **Maps**: Mapbox GL JS
 - **Tooltips, dialogs, menus**: Radix UI primitives
 - **Monitoring**: Vercel logs + Slack incoming webhook for scraper failures
+- **Email**: Resend (double opt-in, dispatch sends, delivery webhooks). Added 2026-09-20 with dev plan v3.
+- **Analytics**: Vercel Web Analytics (cookieless). Added 2026-09-20 with dev plan v3.
 
 Do not substitute any of these without asking first. If a package required for a task doesn't exist or has been deprecated, surface the question rather than installing an alternative.
 
@@ -35,6 +37,8 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 - **Tooltips everywhere.** Use the `<Tooltip>`, `<Metric>`, and `<Term>` components built in Phase 0 for every metric, acronym, and methodology assumption. Centralize definitions in `lib/glossary`.
 - **Static where possible.** ISR with revalidation on admin writes. Don't make things dynamic without a reason.
 - **Admin UX matters.** If data entry is painful, the site goes stale. Budget 20% of every phase for admin ergonomics.
+- **One gate.** A fact is reviewed once: approval publishes it to the site and queues it for the dispatch. A live table holds only approved facts. Unreviewed or model-drafted material lives in a staging table (`proposed_changes`, or pending `waymo_mentions`), never in a live table behind a flag.
+- **Generated prose states only reviewed facts.** The dispatch generator may not introduce a number, name, or date absent from its payload of approved changes. This is enforced by a check, the way `verifyQuote` enforces verbatim quotes.
 
 ## Working agreement
 
@@ -61,7 +65,7 @@ Tailwind v4 uses CSS-based configuration via `@theme` in the global CSS file (e.
 - Use the `SCRAPER_USER_AGENT` env var (format: `TheEmptySeat/1.0 (contact@email.com)`) on every outbound HTTP request.
 - Minimum 2-second delay between requests to the same source.
 - Raw scraped documents go to Supabase Storage so extraction can be re-run.
-- New scraped or extracted data lands as `pending_review` (or equivalent draft state) and is not public until the admin approves.
+- Model-drafted and unreviewed material lands in a staging state (`proposed_changes`, or pending `waymo_mentions`) and is not public until the admin approves. Two sources publish on arrival, decided 2026-09-20: CPUC filings parsed by code, and `waymo.com` roster membership (membership only; a status change still waits for review). Everything else waits, SEC table figures and NHTSA recalls included.
 
 ## Database workflow
 
@@ -119,8 +123,13 @@ After browser verification passes and before proposing the commit:
      rationale, because rationale is the most compressible content in
      the file and facts are already terse.)
 
-  4. Stage architecture.md alongside all other module files in the
-     same commit. Do not make a separate commit for the architecture
+  4. Append the module's build narrative (what was built, what was
+     found, why it looks the way it does) to build-log.md, not to
+     dev-plan.md. dev-plan.md changes only when scope, sequence, or a
+     decision changes.
+
+  5. Stage architecture.md and build-log.md alongside all other module
+     files in the same commit. Do not make a separate commit for the architecture
      update.
 
 ## Security rules
@@ -133,7 +142,7 @@ After browser verification passes and before proposing the commit:
 
 ## Session start
 
-1. Read this file, then `architecture.md` (what exists) and `schema.md` (per-table detail), then `dev-plan.md` (what's next). Any doc split out of `architecture.md` gets added to this list in the same commit that splits it; `schema.md` was split in `6539c73` and went unlisted until 4.6a, so sessions had to be told about it by hand.
+1. Read this file, then `architecture.md` (what exists) and `schema.md` (per-table detail), then `dev-plan.md` (what's next). `build-log.md` (how finished modules got built) is read per entry, when touching that module's work, not in full. Any doc split out of `architecture.md` gets added to this list in the same commit that splits it; `schema.md` was split in `6539c73` and went unlisted until 4.6a, so sessions had to be told about it by hand.
 2. Work the next unfinished module of the current phase, one module at a time, per the working agreement.
 3. `architecture.md`'s "Known gaps and debt" section is the authoritative status ledger; do not trust memory of prior sessions over it.
 
@@ -142,10 +151,11 @@ After browser verification passes and before proposing the commit:
 - **Phase 0** (foundation) and **Phase 1** (thesis + operations): complete, April-May 2026.
 - **Phase 2** (resumption, dev plan v2): August 2026. CPUC scraper rebuilt against cpuc.ca.gov after the Robotaxi Tracker mirror died silently; `disclosed_metrics` table and the national trajectory chart added; city roster refreshed with the 'employee' status; milestones backfilled through August 2026.
 - **Phase 3** (competitive landscape): August 2026. Operator programs and roles, competitor snapshots with disclosure quality, `/landscape` page, CPUC deployment-vs-pilot comparison (Waymo, Zoox, Nuro from Q2 2026).
-- **Phase 4** (financials and extraction), in progress August 2026: 4.1 data model, 4.2 EDGAR scraper, 4.3 transcript scraper (Fool monthly sitemaps), 4.4 extraction pipeline (`lib/extraction/`, verbatim-verified quotes, per-event cost), 4.5 review queue polish (filters, next-unreviewed flow, needs-a-number guard, Storage drop log, stored-source viewer, reprocess via workflow dispatch), 4.6a public earnings timeline and permalinks, 4.6b page work (disclosure-posture matrix, client filter) built; 4.7 backfill run (33 events) reviewed in the 4.5 session, promoted metrics spot-checked and corrected 2026-08-19. 4.6 complete. Next: 4.12 (which must land before any further backfill), then the Q2 2026 call from Alphabet IR that 4.7 could not get from Motley Fool, then 4.8, 4.9, 4.10.
+- **Phase 4** (financials and extraction), in progress August 2026: 4.1 data model, 4.2 EDGAR scraper, 4.3 transcript scraper (Fool monthly sitemaps), 4.4 extraction pipeline (`lib/extraction/`, verbatim-verified quotes, per-event cost), 4.5 review queue polish (filters, next-unreviewed flow, needs-a-number guard, Storage drop log, stored-source viewer, reprocess via workflow dispatch), 4.6a public earnings timeline and permalinks, 4.6b page work (disclosure-posture matrix, client filter) built; 4.7 backfill run (33 events) reviewed in the 4.5 session, promoted metrics spot-checked and corrected 2026-08-19; 4.12 promotion keyed off the model's reading, built 2026-08-20. Next, per dev plan v3 (2026-09-20): Section 0 housekeeping and freshness catch-up, then 4.13 (the Q2 2026 call from Alphabet IR), 4.8, 4.9, 4.10, with 4.14 (metric vocabulary cleanup) floating. v2's 4.11 is retired and re-homed as 5.4.
+- **Phase 5** (The Desk: `proposed_changes`, unified review inbox, news monitor), **Phase 6** (Dispatch: subscribers, generator, `/dispatch` archive, analytics) and **Phase 7** (Launch): not started. Unit economics, safety and outlook are Phases 8 to 10, post-announce.
 
   This section duplicates `architecture.md`'s status ledger and is the one likelier to go stale, since the maintenance block does not cover it. Prefer `architecture.md` when they disagree.
-- The site is deployed on Vercel behind the `SITE_PUBLIC` noindex gate, unannounced. Launch is Phase 5 of dev plan v2; the announce bar is fresh data, financials with the implied P&L, and multi-operator coverage.
+- The site is deployed on Vercel behind the `SITE_PUBLIC` noindex gate, unannounced. Launch is Phase 7 of dev plan v3; the announce bar is fresh data, financials with the implied P&L, multi-operator coverage, and a working subscribe path with at least two dispatch issues in the archive.
 
 **Working agreement refinements (Phases 0-4):**
 - Per-module commits, no chaining modules even when the next looks trivial
