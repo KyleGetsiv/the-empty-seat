@@ -31,7 +31,9 @@ not an edge case. `supervision` ('driverless' | 'safety_operator' |
 'mixed' | 'human_is_legal_driver') and `disclosure_quality`
 ('regulatory' | 'company_disclosed' | 'earnings_disclosed' |
 'press_reported' | 'estimated') put principle 9 in the schema. 11 rows
-seeded 3.2; Apollo Go and Pony need a Q2 refresh after 2026-08-18.
+seeded 3.2; Apollo Go and Pony Q2 rows (2026-08-18) added 2026-09-30, 13
+rows. A refresh adds a row and never edits the earlier one, so the table is
+the history.
 
 #### sources
 Every primary source behind a data point; scrapers and admins both
@@ -41,8 +43,11 @@ document in Storage.
 #### cities
 One row per city per company. `status` (0009): 'announced', 'waitlist',
 'employee' (driverless ops, employee riders only), 'public', 'paused'.
-Waymo roster 18 rows (9 public, 2 waitlist, 4 employee, 3 announced with
-no launch_date, hidden from timeline and map). `name` unique with
+Waymo roster 18 rows as of 2026-09-30 (10 public, 5 waitlist, 0 employee,
+3 announced with no launch_date, hidden from timeline and map). The 2.4
+employee rows carried the employee-operations start as `launch_date`;
+`scripts/update-city-roster-2026-09.ts` reset it to the first public-rider
+date when they moved to 'waitlist', which is what the field means. `name` unique with
 company_id (0004). `program_id` (0010) links competitor cities to
 programs, 30 seeded 3.2; Waymo rows leave it null and Waymo pages filter
 by company_id. `launch_date` is when a market began carrying public

@@ -391,3 +391,64 @@ Design reasoning worth keeping, from the planning session:
   2026-08-20: the 4.12 acceptance notes above, the orphan `cities_count`
   finding in `architecture.md`, and orphan reporting in
   `scripts/audit-promotion-mapping.ts`.
+
+---
+
+## Section 0, items 4 and 5: freshness catch-up (2026-09-30)
+
+Not a module: no new feature code. One session after six idle weeks
+(2026-08-20 to 2026-09-30), run from Cowork with the owner executing every
+network and script step in his own terminal. Findings and their status live in
+`architecture.md` under "Section 0 freshness findings"; this entry records how
+the check was run and why it was shaped that way.
+
+- One read-only diagnostic instead of twenty queries. The session shell has
+  no network, so every database read needed a round trip through the owner.
+  `.claude/tmp/check-freshness.ts` (gitignored, selects only) printed CPUC
+  rows, every event with its mention counts, every snapshot with its source,
+  the Waymo roster, every `disclosed_metrics` row with who cites it, and every
+  `city_count` mention. It lives in scratch on purpose: a freshness check that
+  Phase 7.2 will want again may earn a real script, but not in a session
+  scoped to no new code.
+- The headline finding was not silent. scrape-cpuc went red on 2026-08-24 and
+  stayed red for six weeks: CPUC renamed the deployment zip's folder to
+  `Driverless Deployment/` and Nuro's workbook sheet to the quarter name, and
+  the matcher wanted `driverless/` and `Month-Level`. The 2.2 lesson ("a
+  missing source must escalate") held: it escalated. What failed is that red
+  went unread. Slack confirmed it: a daily scraper-health WARN "OVERDUE: Q2
+  2026" from 2026-09-12 on. The health check also misled before that,
+  posting "Pending at CPUC" for 25 days after CPUC had posted, because it
+  reads absence from our database as absence at the source. The silent
+  failures this time were elsewhere: the transcript
+  scraper green every week while finding no Q2 2026 call (4.13), an expired
+  API key that the extraction pipeline cannot notice until it has work, and
+  a Waymo city (San Antonio) paused for five months behind a 'waitlist' row.
+- Figures were re-verified from primaries, never from `briefing-2026-08.md`.
+  Two judgement calls, both the owner's: Apollo Go's Q2 weekly rides stay
+  null (Baidu disclosed a quarterly total, about 1M, not a weekly rate, and
+  dividing by 13 would publish a number nobody stated); Pony's Q2 city count
+  stays null because the call framed 20 cities as a year-end goal.
+- The roster script appends notes rather than replacing them and moves an
+  employee city's `launch_date` to the first public-rider date on the
+  transition, correcting what 2.4 stored.
+- The orphan `cities_count 11` turned out to be a true figure with a broken
+  citation, not a mistake: Pichai said it, the model read it correctly as
+  `cities_count`, and review rejected the mention, apparently because it was
+  typed `revenue_reference`. Under 4.12 the model's reading drives promotion,
+  so retyping and approving re-cites the existing row.
+  Done in the admin UI; the audit then reported 0 orphans and 0 duplicate
+  (metric, value) pairs, so promotion linked rather than inserted.
+- The reprocess button's first use doubled as the key test. No event had 0
+  chunks (the free test), so the stuck Q2 2024 8-K was the target: one model
+  call, about $0.01, on an event that needed one anyway. It proved the
+  token, the dispatch, and the rotated key (a bad key would have warned
+  'failed' under a green run, which is why the log line, not the green
+  check, was the evidence). The model again found 0 mentions, so the event
+  stays stuck, and that becomes its own debt item.
+- Types regeneration found real drift: the hand patches had missed
+  `cities.service_area_geojson` and the `ride_estimates.program_id` write
+  fields. tsc and lint clean after.
+- Accuracy pass (architecture.md appendix): added the 4.6b lib files
+  (earnings-card, earnings-posture, earnings-search) and the `og` API route,
+  which the quick map had never listed, plus `scrapers/__fixtures__/` and the
+  empty `lib/utils/`.

@@ -42,7 +42,9 @@ context.
   host, so social cards and canonical URLs will point at the
   `.vercel.app` domain until this is set. Added 4.6b, pairs with the
   domain swap in 6.1 (dev plan v3).
-- [ ] **Duplicate SCRAPER_USER_AGENT in `.env.local`.** The key is
+- [x] **Duplicate SCRAPER_USER_AGENT in `.env.local`.** (Done 2026-09-30: the
+  two lines were identical; the second was removed. The Actions secret is the
+  value EDGAR sees; reset to the same string the same day.) The key is
   defined twice (lines 7 and 17). Whichever the parser reads last
   wins, so the user agent actually sent to SEC EDGAR may not be the
   one intended, and EDGAR's fair-use policy expects a real contact
@@ -50,12 +52,17 @@ context.
   Found by the 4.6b architecture accuracy pass.
 - [ ] **Competitor snapshot freshness.** Every `competitor_snapshots`
   row less than one quarter old at launch; Apollo Go and Pony.ai refreshed
-  after their 2026-08-18 Q2 earnings. Added 3.5.
-- [ ] **Types regeneration.** `supabase gen types typescript --linked >
+  after their 2026-08-18 Q2 earnings. Added 3.5. Apollo Go and Pony done
+  2026-09-30. Still open: Didi (2026-04-15), and every row dated 2026-08-01
+  or 2026-08-15 crosses a quarter in mid-November; Waymo One, Zoox and Tesla
+  are already behind in content (see architecture.md, Section 0 findings).
+- [x] **Types regeneration.** (Done 2026-09-30, through 0013.) `supabase gen types typescript --linked >
   lib/supabase/types.ts` run and committed after all migrations through
   0013 are pushed. Hand-patched for 0006 through 0013 in the meantime.
   Added 3.5, updated 2026-08-19.
-- [ ] **Reprocess button never exercised.** `/admin/earnings/[id]` renders
+- [x] **Reprocess button never exercised.** (Done 2026-10-01: token set in
+  Vercel Production, dispatch accepted, run 36810296472 green with a real
+  model call.) `/admin/earnings/[id]` renders
   its reprocess control disabled because `GITHUB_DISPATCH_TOKEN` is unset,
   so one of module 4.5's deliverables has never run. Needs a fine-grained
   PAT with Actions read and write, set in Vercel and `.env.local`, then one
@@ -93,6 +100,19 @@ context.
 - [ ] **Vercel plan check.** Hobby is non-commercial and has analytics
   event limits; confirm both still fit before launch, module 6.5. Added
   2026-09-20.
+
+- [ ] **CPUC Q2 2026 in the database.** scrape-cpuc has failed every week
+  since 2026-08-24 on a renamed zip folder and a renamed Nuro sheet, so the
+  homepage CPUC series stops at Q1 2026. Needs the parser fix proposed as
+  `fix(2.2)`, then one green run that writes Waymo deployment, Zoox and Nuro
+  pilot Q2 rows. Added 2026-09-30.
+- [ ] **Waymo roster re-check against waymo.com.** Six rows were stale after
+  one idle month (San Antonio for five). Repeat within a week of launch, or
+  rely on 5.4's roster scraper if it has shipped. Added 2026-09-30.
+- [ ] **Extraction key proves itself.** An expired `ANTHROPIC_API_KEY`
+  surfaces only as a per-event 'failed' under a green run. Either make the
+  credential check fatal on a bad key or confirm a real extraction ran green
+  within a week of launch. Added 2026-09-30.
 
 ## Open
 
