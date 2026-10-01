@@ -68,7 +68,9 @@ quarterly series). `rides_per_week` is normalized weekly.
 `vehicle_miles_traveled` from 0007 (CPUC VMT ZEV); `program_id` and
 `tier` ('deployment' | 'pilot') from 0011. Waymo's CPUC deployment
 series is company_id waymo with city_id and program_id null; the pilot
-series (Zoox, Nuro from Q2 2026) sets program_id and tier 'pilot'.
+series (Zoox; Nuro is configured but its Q2 2026 filing is Drivered and
+non-template, so no row) sets program_id and tier 'pilot'. Pilot rows are
+driverless trips only (fix(2.2) removed the fallback to Drivered data).
 
 #### financial_periods
 Disclosed or modeled financials by fiscal period; `is_disclosed`

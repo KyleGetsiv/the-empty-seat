@@ -182,7 +182,14 @@ console.log("\nAll tests passed");
 
 import { zipSync as zipSync2, strToU8 as s2u } from "fflate";
 import { readXlsxSheet, rowsToCsv } from "@/lib/scrapers/cpuc-xlsx";
-import { extractPilotMonthCsv, PILOT_CARRIERS } from "@/lib/scrapers/cpuc";
+import { extractPilotMonthCsv, PILOT_CARRIERS, type ExtractedZip } from "@/lib/scrapers/cpuc";
+
+// extractPilotMonthCsv returns the extraction or the reason there is none
+// (fix(2.2)); tests that expect an extraction narrow with this.
+function extracted(out: ReturnType<typeof extractPilotMonthCsv>): ExtractedZip {
+  if ("miss" in out) throw new Error(`expected extraction, got miss: ${out.miss}`);
+  return out;
+}
 
 function buildXlsx(): Uint8Array {
   const header = ["TCPID","Year","Month","TotalTrips","TotalWaiting","TotalVMTPeriod1","TotalVMTPeriod2","TotalVMTPeriod3","TotalVMTZEV","TotalPassengersCarried","TotalPMT"];
@@ -254,13 +261,12 @@ test("extractPilotMonthCsv reads Zoox xlsx from the pilot zip layout", () => {
     "AV Pilot 2026Q1/Waymo/Driverless Pilot/PSG0038152_2026_05_AV_Month_Part0.csv": s2u("TCPID,Year,Month,TotalTrips,TotalVMTZEV\nx,2026,1,1,1\n"),
   });
   const zoox = PILOT_CARRIERS.find((c) => c.folder === "Zoox")!;
-  const out = extractPilotMonthCsv(zip, zoox);
-  assert.ok(out, "expected extraction");
-  const totals = aggregateQuarter(parseMonthCsv(out!.monthCsv), { year: 2026, q: 1 });
+  const out = extracted(extractPilotMonthCsv(zip, zoox));
+  const totals = aggregateQuarter(parseMonthCsv(out.monthCsv), { year: 2026, q: 1 });
   assert.equal(totals.totalTrips, ZOOX_Q1_TRIPS);
   // PDFs excluded, extracted CSV always archived
-  assert.ok(out!.archivable.some((f) => f.name.endsWith("month-level-extracted.csv")));
-  assert.ok(!out!.archivable.some((f) => /\.pdf$/i.test(f.name)));
+  assert.ok(out.archivable.some((f) => f.name.endsWith("month-level-extracted.csv")));
+  assert.ok(!out.archivable.some((f) => /\.pdf$/i.test(f.name)));
 });
 
 test("extractPilotMonthCsv prefers CSV template when a carrier files CSVs", () => {
@@ -269,16 +275,15 @@ test("extractPilotMonthCsv prefers CSV template when a carrier files CSVs", () =
     "AV Pilot 2026Q2/Nuro/Driverless Pilot/TCP47827_2026_08_AV_Month_Part0.csv": s2u(csv),
   });
   const nuro = PILOT_CARRIERS.find((c) => c.folder === "Nuro")!;
-  const out = extractPilotMonthCsv(zip, nuro);
-  assert.ok(out);
-  const totals = aggregateQuarter(parseMonthCsv(out!.monthCsv), { year: 2026, q: 2 });
+  const out = extracted(extractPilotMonthCsv(zip, nuro));
+  const totals = aggregateQuarter(parseMonthCsv(out.monthCsv), { year: 2026, q: 2 });
   assert.equal(totals.totalTrips, 600);
 });
 
-test("extractPilotMonthCsv returns null when the carrier folder is absent", () => {
+test("extractPilotMonthCsv reports no_folder when the carrier folder is absent", () => {
   const zip = zipSync2({ "AV Pilot 2026Q1/Zoox/x.pdf": s2u("%PDF") });
   const nuro = PILOT_CARRIERS.find((c) => c.folder === "Nuro")!;
-  assert.equal(extractPilotMonthCsv(zip, nuro), null);
+  assert.deepEqual(extractPilotMonthCsv(zip, nuro), { miss: "no_folder" });
 });
 
 if (failures > 0) {
@@ -286,3 +291,124 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log("Pilot tests passed");
+
+// ---------------------------------------------------------------------------
+// fix(2.2): CPUC's renamed folders and files. The listings fixture holds the
+// real file names from every zip CPUC has posted in the pattern era (names
+// only), so the matcher is tested against each layout rather than one.
+// ---------------------------------------------------------------------------
+
+import {
+  isMonthLevelFile,
+  pickDeploymentMonthFile,
+  pickPilotMonthFile,
+  zipAvailability,
+} from "@/lib/scrapers/cpuc";
+import { classifyMissingQuarter } from "@/lib/cpuc-calendar";
+
+const listings = JSON.parse(
+  readFileSync(resolve(process.cwd(), "lib/scrapers/__fixtures__/cpuc-zip-listings.json"), "utf8")
+).listings as Record<string, string[]>;
+const base = (p: string | undefined) => p?.split("/").pop();
+
+const EXPECTED_DEPLOYMENT: Record<string, string> = {
+  "2025q2": "PSG0038152_2025_08_AV_ Month_Level-Deployment.csv",
+  "2025q3": "PSG0038152_2025_11_AV_Month_Level-Deployment.csv",
+  "2025q4": "PSG0038152_2026_02_AV_Month-Level_Part0-Deployment.csv",
+  "2026q1": "PSG0038152_2026_05_AV_Month_Part0-Deployment.csv",
+  "2026q2": "PSG0038152_2026_08_AV_Month_Part0-Deployment.csv",
+};
+for (const [q, expected] of Object.entries(EXPECTED_DEPLOYMENT)) {
+  test(`pickDeploymentMonthFile finds the driverless month file in the real ${q} zip`, () => {
+    const picked = pickDeploymentMonthFile(listings[q]);
+    assert.equal(base(picked), expected);
+    assert.match(picked!, /driverless/i);
+  });
+}
+
+test("isMonthLevelFile rejects Monthly Tract in every spelling CPUC has used", () => {
+  for (const n of [
+    "PSG0038152_2025_08_AV_ Monthly Tract-Deployment-Public.csv",
+    "PSG0038152_2026_02_AV_Monthly-Tract_Part0-Deployment-Public.csv",
+    "PSG0038152_2026_05_AV_Monthly_Tract_Part0-Deployment-Public.csv",
+    "Monthly_Tract.csv",
+  ]) assert.equal(isMonthLevelFile(`x/Driverless/${n}`), false, n);
+});
+
+test("pickDeploymentMonthFile never takes the Drivered folder", () => {
+  assert.equal(
+    pickDeploymentMonthFile(["Waymo Deployment 2026Q1/Drivered/PSG0038152_2026_05_AV_Month_Part0.csv"]),
+    undefined
+  );
+});
+
+const Q2_2026_TRIPS = 1_416_158 + 1_454_991 + 1_348_926; // 4,220,075
+const Q2_2026_VMT = 9_414_525.13 + 9_704_968.28 + 9_023_791.29; // 28,143,284.70
+
+test("extractFromZip reads the real Q2 2026 deployment CSV in its renamed folder", () => {
+  const csv = readFileSync(
+    resolve(process.cwd(), "lib/scrapers/__fixtures__/cpuc-av-month-driverless-2026q2.csv"),
+    "utf8"
+  );
+  const zip = zipSync({
+    "Waymo Deployment 2026Q2/Driverless Deployment/PSG0038152_2026_08_AV_Month_Part0-Deployment.csv": strToU8(csv),
+    "Waymo Deployment 2026Q2/Driverless Deployment/PSG0038152_2026_08_AV_Monthly_Tract_Part0-Deployment-Public.csv": strToU8("a\n1\n"),
+  });
+  const totals = aggregateQuarter(parseMonthCsv(extractFromZip(zip).monthCsv), { year: 2026, q: 2 });
+  assert.equal(totals.monthsFound, 3);
+  assert.equal(totals.totalTrips, Q2_2026_TRIPS);
+  assert.ok(Math.abs(totals.totalVmtZev - Q2_2026_VMT) < 0.01);
+});
+
+test("pickPilotMonthFile: Zoox Q2 2026 switched to CSVs; the Driverless one is chosen", () => {
+  const zoox = listings["pilot-2026q2"].filter((n) => n.includes("/Zoox/"));
+  assert.deepEqual(pickPilotMonthFile(zoox), { kind: "csv", name: "AV Pilot 2026Q2/Zoox/Driverless/Month-Level.csv" });
+});
+
+test("pickPilotMonthFile: Zoox Q1 2026 still resolves to the Driverless xlsx", () => {
+  const zoox = listings["pilot-2026q1"].filter((n) => n.includes("/Zoox/"));
+  const pick = pickPilotMonthFile(zoox);
+  assert.equal(pick?.kind, "xlsx");
+  assert.match(pick!.name, /Data Tables Driverless\.xlsx$/);
+});
+
+test("pickPilotMonthFile: Nuro Q2 2026 is a Drivered, non-template filing and yields nothing", () => {
+  const nuro = listings["pilot-2026q2"].filter((n) => n.includes("/Nuro/"));
+  assert.ok(nuro.length > 0);
+  assert.equal(pickPilotMonthFile(nuro), null);
+});
+
+test("the real Zoox Q2 2026 Month-Level.csv parses (float years, blank rows)", () => {
+  const csv = readFileSync(
+    resolve(process.cwd(), "lib/scrapers/__fixtures__/cpuc-pilot-zoox-driverless-month-level-2026q2.csv"),
+    "utf8"
+  );
+  const totals = aggregateQuarter(parseMonthCsv(csv), { year: 2026, q: 2 });
+  assert.equal(totals.monthsFound, 3);
+  assert.equal(totals.totalTrips, 9922 + 12665 + 13097);
+  assert.ok(Math.abs(totals.totalVmtZev - (47322.83 + 65708.4 + 67922.81)) < 0.01);
+});
+
+test("classifyMissingQuarter separates posted-but-not-ingested from not posted", () => {
+  assert.equal(classifyMissingQuarter(200, false), "ingest_failing");
+  assert.equal(classifyMissingQuarter(200, true), "ingest_failing");
+  assert.equal(classifyMissingQuarter(404, false), "pending");
+  assert.equal(classifyMissingQuarter(404, true), "overdue");
+  assert.equal(classifyMissingQuarter(403, false), "unknown_pending");
+  assert.equal(classifyMissingQuarter(null, true), "unknown_overdue");
+});
+
+test("zipAvailability: CPUC's 302 for an unposted quarter is absent, never served", () => {
+  assert.equal(zipAvailability(200, "application/x-zip-compressed"), "served");
+  assert.equal(zipAvailability(200, null), "served");
+  assert.equal(zipAvailability(200, "text/html; charset=utf-8"), "absent");
+  assert.equal(zipAvailability(302, "text/html"), "absent");
+  assert.equal(zipAvailability(404, null), "absent");
+  assert.deepEqual(zipAvailability(403, "text/html"), { status: 403 });
+});
+
+if (failures > 0) {
+  console.error(`\n${failures} test(s) failed (fix(2.2) section)`);
+  process.exit(1);
+}
+console.log("fix(2.2) tests passed");

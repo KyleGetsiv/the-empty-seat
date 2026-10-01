@@ -55,6 +55,20 @@ export function deploymentZipUrl(qt: Quarter): string {
   return `${CPUC_MEDIA_BASE}/waymo-deployment-${qt.year}q${qt.q}.zip`;
 }
 
+// fix(2.2): CPUC answers a not-yet-posted quarter with a 302, not a 404
+// (checked 2026-10-01: Q2 2026 zip HEAD 200, Q3 2026 HEAD 302). Followed, the
+// redirect could land on an HTML page with status 200, which this scraper
+// would try to unzip and scraper-health would read as "posted". So every
+// zip fetch uses redirect: "manual", and a zip counts as served only on a
+// 200 that is not HTML; a redirect or 404 means not posted.
+export type ZipAvailability = "served" | "absent" | { status: number };
+
+export function zipAvailability(status: number, contentType: string | null): ZipAvailability {
+  if (status === 200) return /text\/html/i.test(contentType ?? "") ? "absent" : "served";
+  if (status === 404 || (status >= 300 && status < 400)) return "absent";
+  return { status };
+}
+
 // Pilot Program archive: one zip per quarter containing every pilot
 // carrier's filing in its own folder. Pattern stable since 2025 Q2.
 export function pilotZipUrl(qt: Quarter): string {
@@ -191,18 +205,44 @@ export interface ExtractedZip {
   archivable: { name: string; data: Uint8Array }[];
 }
 
+// fix(2.2): CPUC renames the month-level file and its folder almost every
+// quarter. Seen so far (lib/scrapers/__fixtures__/cpuc-zip-listings.json):
+//   2025 Q2  Driverless Deployment/..._AV_ Month_Level-Deployment.csv
+//   2025 Q3  2025-11_Driverless-Deployment Public/..._AV_Month_Level-Deployment.csv
+//   2025 Q4  Driverless/..._AV_Month-Level_Part0-Deployment.csv
+//   2026 Q1  Driverless/..._AV_Month_Part0-Deployment.csv
+//   2026 Q2  Driverless Deployment/..._AV_Month_Part0-Deployment.csv
+//   Zoox pilot 2026 Q2  Zoox/Driverless/Month-Level.csv
+// The 2.2 pattern (/driverless\/.*av_month_part\d+/) matched only 2026 Q1, so
+// Q2 2026 failed for six weeks and every deep verify of 2025 failed too.
+// Matching is now two independent tests: the file sits under SOME folder
+// whose name contains "driverless" (never "Drivered"), and its basename,
+// with spaces and hyphens folded to underscores, contains "month_level" or
+// "month_partN". "Monthly_Tract" fails the second test, as it must.
+export function isMonthLevelFile(path: string): boolean {
+  const base = (path.split("/").pop() ?? "").toLowerCase().replace(/[\s-]+/g, "_");
+  return /\.csv$/.test(base) && /(^|_)month_(level|part\d+)/.test(base);
+}
+
+export function inDriverlessFolder(path: string): boolean {
+  return path.split("/").slice(0, -1).some((dir) => /driverless/i.test(dir));
+}
+
+// The deployment zip's driverless month-level CSV, or undefined.
+export function pickDeploymentMonthFile(names: string[]): string | undefined {
+  return names.find((n) => inDriverlessFolder(n) && isMonthLevelFile(n));
+}
+
 // Extracts the Driverless AV_Month CSV plus all small CSVs worth archiving.
 // The filename prefix inside the zip encodes Waymo's TCP ID and the filing
-// month, so files are matched by suffix pattern, never by exact name.
+// month, so files are matched by pattern (above), never by exact name.
 export function extractFromZip(zipBytes: Uint8Array): ExtractedZip {
   const files = unzipSync(zipBytes, {
     filter: (file) =>
       /\.csv$/i.test(file.name) && file.originalSize < ARCHIVE_MAX_BYTES,
   });
 
-  const monthKey = Object.keys(files).find((name) =>
-    /driverless\/.*av_month_part\d+.*\.csv$/i.test(name)
-  );
+  const monthKey = pickDeploymentMonthFile(Object.keys(files));
   if (!monthKey) {
     throw new Error(
       `No Driverless AV_Month CSV found in zip; files: ${Object.keys(files)
@@ -225,42 +265,50 @@ export function extractFromZip(zipBytes: Uint8Array): ExtractedZip {
   };
 }
 
+// Why a pilot carrier produced no row, so the run summary can say which.
+export type PilotMiss = "no_folder" | "no_driverless_month_level";
+
+// Picks a pilot carrier's DRIVERLESS month-level file from the names in its
+// folder: a CSV by isMonthLevelFile (Zoox from Q2 2026, Waymo-style
+// filers), else a template xlsx whose path says driverless (Zoox through Q1
+// 2026). fix(2.2) removed the fallback to any month-level file: the series
+// is labelled driverless everywhere it renders, and the fallback would have
+// filled it with safety-driver trips (Zoox's Drivered folder, Nuro's whole
+// filing). Nuro files a per-VIN quarterly workbook for its Drivered permit,
+// not the template, so it lands here as no_driverless_month_level, the same
+// out-of-scope class as Aurora and Tensor.
+export function pickPilotMonthFile(
+  names: string[]
+): { kind: "csv" | "xlsx"; name: string } | null {
+  const isDriverless = (n: string) => /driverless/i.test(n);
+  const csv = names.find((n) => isDriverless(n) && isMonthLevelFile(n));
+  if (csv) return { kind: "csv", name: csv };
+  const xlsx = names.find(
+    (n) => /\.xlsx$/i.test(n) && isDriverless(n) && !/tract|incident|charg|stoppage/i.test(n)
+  );
+  return xlsx ? { kind: "xlsx", name: xlsx } : null;
+}
+
 // Finds a pilot carrier's driverless month-level data inside the pilot zip.
-// Prefers the Driverless tier (folder or filename containing "driverless");
-// falls back to any month-level file for the carrier. Returns CSV text in
-// the AV_Month schema plus the small archivable files for that carrier.
+// Returns CSV text in the AV_Month schema plus the small archivable files
+// for that carrier, or the reason there is none.
 export function extractPilotMonthCsv(
   zipBytes: Uint8Array,
   carrier: PilotCarrier
-): ExtractedZip | null {
+): ExtractedZip | { miss: PilotMiss } {
   const folderRe = new RegExp(`(^|/)${carrier.folder}/`, "i");
   const files = unzipSync(zipBytes, {
     filter: (f) => folderRe.test(f.name) && f.originalSize > 0,
   });
   const names = Object.keys(files);
-  if (names.length === 0) return null;
+  if (names.length === 0) return { miss: "no_folder" };
 
-  const isDriverless = (n: string) => /driverless/i.test(n);
-  const monthCsvs = names.filter((n) => /\.csv$/i.test(n) && /av_month_part\d+/i.test(n));
-  const monthXlsx = names.filter(
-    (n) => /\.xlsx$/i.test(n) && !/tract|incident|charg|stoppage/i.test(n)
-  );
-
-  let monthCsv: string | null = null;
-
-  // 1. CSV template (Waymo-style pilot filing)
-  const csvPick = monthCsvs.find(isDriverless) ?? monthCsvs[0];
-  if (csvPick) monthCsv = new TextDecoder().decode(files[csvPick]);
-
-  // 2. xlsx template (Zoox-style): read the Month-Level sheet
-  if (!monthCsv) {
-    const xlsxPick = monthXlsx.find(isDriverless) ?? monthXlsx.find(() => true);
-    if (xlsxPick) {
-      const rows = readXlsxSheet(files[xlsxPick], "Month-Level");
-      monthCsv = rowsToCsv(rows);
-    }
-  }
-  if (!monthCsv) return null;
+  const pick = pickPilotMonthFile(names);
+  if (!pick) return { miss: "no_driverless_month_level" };
+  const monthCsv =
+    pick.kind === "csv"
+      ? new TextDecoder().decode(files[pick.name])
+      : rowsToCsv(readXlsxSheet(files[pick.name], "Month-Level"));
 
   const archivable = names
     .filter((n) => files[n].length < ARCHIVE_MAX_BYTES && !/\.pdf$/i.test(n))
@@ -425,12 +473,14 @@ export async function runCpucScrape(): Promise<CpucScrapeResult> {
 
         const res = await fetch(deploymentZipUrl(qt), {
           headers: { "User-Agent": userAgent },
+          redirect: "manual",
         });
+        const availability = zipAvailability(res.status, res.headers.get("content-type"));
 
-        if (res.status === 404) {
+        if (availability === "absent") {
           if (existing) {
             // Published before, missing now: CPUC reshuffled the URL. Surface.
-            console.warn(`[cpuc] ${label} zip 404 but quarter exists in DB`);
+            console.warn(`[cpuc] ${label} zip not served (HTTP ${res.status}) but quarter exists in DB`);
             result.errors++;
           } else if (isOverdue(qt, now)) {
             result.overdue.push(label);
@@ -439,7 +489,7 @@ export async function runCpucScrape(): Promise<CpucScrapeResult> {
           }
           continue;
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${label}`);
+        if (availability !== "served") throw new Error(`HTTP ${res.status} fetching ${label}`);
 
         const zipBytes = new Uint8Array(await res.arrayBuffer());
         const { monthCsv, archivable } = extractFromZip(zipBytes);
@@ -554,14 +604,15 @@ export async function runCpucScrape(): Promise<CpucScrapeResult> {
       let zipBytes: Uint8Array;
       try {
         await sleep(REQUEST_DELAY_MS);
-        const res = await fetch(pilotZipUrl(qt), { headers: { "User-Agent": userAgent } });
-        if (res.status === 404) {
+        const res = await fetch(pilotZipUrl(qt), { headers: { "User-Agent": userAgent }, redirect: "manual" });
+        const availability = zipAvailability(res.status, res.headers.get("content-type"));
+        if (availability === "absent") {
           // Same overdue logic as deployment; the pilot zip is posted at the
           // same time, so a missing deployment quarter already produced the
           // warning. Skip quietly here.
           continue;
         }
-        if (!res.ok) throw new Error(`HTTP ${res.status} fetching pilot ${label}`);
+        if (availability !== "served") throw new Error(`HTTP ${res.status} fetching pilot ${label}`);
         zipBytes = new Uint8Array(await res.arrayBuffer());
       } catch (err) {
         console.error(`[cpuc] pilot ${label}:`, err);
@@ -580,8 +631,10 @@ export async function runCpucScrape(): Promise<CpucScrapeResult> {
         }
         try {
           const extracted = extractPilotMonthCsv(zipBytes, carrier);
-          if (!extracted) {
-            result.pilot.missing.push(`${carrier.label} ${label}`);
+          if ("miss" in extracted) {
+            result.pilot.missing.push(
+              `${carrier.label} ${label} (${extracted.miss === "no_folder" ? "no folder" : "no driverless month-level data"})`
+            );
             continue;
           }
           const totals = aggregateQuarter(parseMonthCsv(extracted.monthCsv), qt);

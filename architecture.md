@@ -15,9 +15,9 @@ See the architecture maintenance block in CLAUDE.md.
 
 ## Last updated
 
-Module: Section 0 (dev plan v3 freshness catch-up and pending-user items)
-Date: 2026-09-30
-Commit: Section 0 work
+Module: fix(2.2) (CPUC parser for renamed files; scraper-health honesty)
+Date: 2026-10-01
+Commit: fix(2.2) work
 
 ---
 
@@ -257,8 +257,17 @@ cascade to a child dynamic route (4.6a).
 - **scrapers/cpuc.ts:** `runCpucScrape()` over cpuc.ca.gov quarterly zips.
   Deployment tier (2.2) upserts Waymo ride_estimates, restatements in
   place, Slack WARN past grace; pilot tier (3.4) writes per-program rows
-  for `PILOT_CARRIERS` (Zoox, Nuro), absent carriers reported not errored.
-  **cpuc-xlsx.ts** reads Zoox's xlsx. Non-template filers out of scope.
+  for `PILOT_CARRIERS` (Zoox, Nuro), DRIVERLESS data only, a miss reported
+  with its reason (no folder, no driverless month-level data), never as an
+  error. File choice is `pickDeploymentMonthFile()` / `pickPilotMonthFile()`
+  over `isMonthLevelFile()` + `inDriverlessFolder()` (fix(2.2)), tested
+  against every zip layout in `__fixtures__/cpuc-zip-listings.json`;
+  `zipAvailability()` decides posted vs not. **cpuc-xlsx.ts** reads Zoox's
+  pre-Q2-2026 xlsx. Non-template filers (Aurora, Tensor, WeRide, Nuro's
+  Drivered workbook) out of scope.
+- **cpuc-calendar.ts** also holds `classifyMissingQuarter()` (fix(2.2)):
+  ingest_failing / pending / overdue / unknown, from the zip's availability
+  and the calendar. scraper-health uses it.
 - **scrapers/sec-edgar.ts (4.2):** `runEdgarScrape({since?})` over the
   submissions API for `EDGAR_FILERS`; 10-K, 10-Q, 8-K item 2.02 only;
   dedupes on accession_number; primary doc plus EX-99.1 to Storage;
@@ -344,7 +353,7 @@ cascade to a child dynamic route (4.6a).
 | Mapbox | live | NEXT_PUBLIC_MAPBOX_TOKEN | CoverageMap (1.2.c) |
 | Slack | live (prod) | SLACK_WEBHOOK_URL | production channel in Vercel; dev URL retained in .env.local |
 | Anthropic API | live (4.4) | ANTHROPIC_API_KEY, EXTRACTION_MODEL (optional), EXTRACTION_PRICE_IN/OUT (optional) | `@anthropic-ai/sdk`, tool-use extraction, default `claude-sonnet-5` |
-| Vercel Cron | live | CRON_SECRET | scraper-health daily; rotated in 1.6 |
+| Vercel Cron | live | CRON_SECRET, SCRAPER_USER_AGENT (fix(2.2), for scraper-health's HEAD to CPUC) | scraper-health daily; rotated in 1.6 |
 | GitHub Actions | live | Supabase URL + service key, SCRAPER_USER_AGENT, SLACK_WEBHOOK_URL, ANTHROPIC_API_KEY | scrape-cpuc weekly Mon 13:17 UTC; scrape-edgar daily 14:07 (`since`); scrape-transcripts weekly Wed 15:11 (`from-year`); extract-earnings hourly :23 (`event`, `limit`, `include-failed`); all UTC, dispatch inputs in parens. Inputs reach the shell through env and positional args, never string interpolation |
 | GitHub API | live (4.5; token set 2026-09-30) | GITHUB_DISPATCH_TOKEN, GITHUB_REPO, GITHUB_DISPATCH_REF | admin reprocess button dispatches extract-earnings.yml for one event; fine-grained PAT with Actions read and write |
 | SEC EDGAR | live (4.2) | SCRAPER_USER_AGENT | data.sec.gov submissions API + Archives; fair-use headers; Alphabet CIK 0001652044 |
@@ -405,6 +414,13 @@ cascade to a child dynamic route (4.6a).
   row. Promotion is withdrawn when a mention leaves a promoting type or is
   rejected, deleting the row only if no approved mention still cites it.
   `notes` carries no ids: the `<Metric>` tooltip can surface it publicly.
+- **Absence in our database is not absence at the source (fix(2.2)):** a
+  freshness check that sees no row must ask the source before saying "not
+  posted yet", or a broken parser reads as a slow regulator, as it did for
+  25 days in 2026. And a source's "not posted" is whatever it actually
+  returns: CPUC answers an unposted quarter with a 302, so every zip fetch
+  uses `redirect: "manual"` and only a non-HTML 200 counts as served. A
+  query error is reported as an error, never as zero rows.
 - **Map fill is tier, never count (1.2.c):** the state choropleth encodes
   the most advanced driverless service a state has reached, not deployment
   density; a count would put Tesla's safety-driver service on the same axis
@@ -536,32 +552,23 @@ cascade to a child dynamic route (4.6a).
 **Section 0 freshness findings (2026-09-30).** The repo was idle
 2026-08-20 to 2026-09-30. What went stale, what was fixed, what is open:
 
-- OPEN, NEEDS CODE: **scrape-cpuc red on all 6 runs since 2026-08-24; CPUC
-  Q2 2026 is not in `ride_estimates`** (posted by CPUC by 2026-08-18; latest
-  rows are Q1 2026 for Waymo and Zoox). Two parser assumptions broke. (1)
-  `extractFromZip` matches `/driverless\/.*av_month_part\d+.*\.csv$/i`, and
-  CPUC renamed the folder `Driverless Deployment/`; the file
-  (`PSG0038152_2026_08_AV_Month_Part0-Deployment.csv`) is there. (2) Nuro's
-  pilot workbook has no `Month-Level` sheet; the data is on `Q2 2026
-  (April-June)`. Zoox Q2 pilot wrote no row and logged no error, so it was
-  reported as absent from the filing; unconfirmed. The 2026-09-07
-  deep-verify run also failed on Q2, Q3 and Q4 2025 (renamed folders in the
-  re-posted zips), so restatement detection has been blind since then; the
-  stored rows are intact. Proposed as a `fix(2.2)` commit after Section 0.
-- CONFIRMED: **the alerts reached Slack; nobody acted on them.**
-  scraper-health posted daily. From 2026-09-12 (deadline plus grace) it
-  posted a daily WARN "OVERDUE: Q2 2026", through today. So the gap was
-  attention, not alerting. Two defects in what it said, both code:
-  (1) Through 2026-09-11 it posted INFO "Pending at CPUC: Q2 2026" while CPUC
-  had posted the quarter by 2026-08-18 and our scraper was failing on it.
-  scraper-health infers "not posted at the source" from "not in our
-  database", so for 25 days a broken parser read as a slow regulator. It
-  should report the last scrape-cpuc outcome (or the source page's posted
-  quarters) separately from what is in the DB. (2) On 2026-09-13 it posted
-  "0 CPUC deployment quarters ... OVERDUE: Q2 2025, Q3 2025, Q4 2025, Q1
-  2026, Q2 2026", then 5 quarters again the next day: a failed or empty
-  query read as no data. A query error should be its own error-level
-  message, never a count of zero.
+- RESOLVED in fix(2.2), 2026-10-01: **scrape-cpuc red on all 6 runs from
+  2026-08-24; CPUC Q2 2026 missing.** CPUC renames the month-level file and
+  its folder almost every quarter, and the 2.2 matcher fit only Q1 2026.
+  Q2 2026 is now in: Waymo deployment 4,220,075 trips (324,621/week), Zoox
+  pilot 35,684 driverless trips. Nuro is not ingested: its Q2 filing is a
+  Drivered, non-template per-VIN workbook (65.66 miles, 27 passengers), the
+  same out-of-scope class as Aurora and Tensor, so the pilot comparison is
+  Waymo vs Zoox until Nuro files driverless template data. Detail in
+  build-log.md.
+- RESOLVED in fix(2.2): **the alerts reached Slack; nobody acted on them,
+  and the health check misdescribed the failure.** Daily WARN "OVERDUE: Q2
+  2026" from 2026-09-12, so the gap was attention, not alerting. But for the
+  25 days before, it posted INFO "Pending at CPUC" while CPUC was serving
+  the zip, and on 2026-09-13 a failed query read as 0 quarters with every
+  quarter overdue. scraper-health now asks CPUC (HEAD per missing quarter)
+  and says INGEST FAILING at once when the zip is live, and a query error is
+  an error-level message and a 500.
 - OPEN (4.13): scrape-transcripts green on all 6 runs while logging "Alphabet
   Q2 2026: no transcript listed in sitemaps 2026-07, 2026-08" every week
   (also Q3 2024, Q1 2025). The 16-green-no-op pattern again; already scoped

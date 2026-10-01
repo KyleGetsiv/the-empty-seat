@@ -88,3 +88,27 @@ export function expectedQuarters(now: Date): Quarter[] {
   }
   return out;
 }
+
+// fix(2.2): what a quarter missing from our database means, given whether
+// CPUC is serving its zip. scraper-health used to infer "not posted at CPUC"
+// from "not in our DB", so for 25 days in 2026 a broken parser read as a slow
+// regulator ("Pending at CPUC: Q2 2026" while the zip had been live since
+// mid-August). A live zip with no row is an ingest failure, whatever the
+// calendar says, and escalates at once rather than after the grace period.
+// Any status other than 200 or 404 (or no response) is not evidence either
+// way, so the calendar decides and the message says CPUC could not be checked.
+export type MissingQuarterState =
+  | "ingest_failing"
+  | "pending"
+  | "overdue"
+  | "unknown_pending"
+  | "unknown_overdue";
+
+export function classifyMissingQuarter(
+  zipStatus: number | null,
+  overdue: boolean
+): MissingQuarterState {
+  if (zipStatus === 200) return "ingest_failing";
+  if (zipStatus === 404) return overdue ? "overdue" : "pending";
+  return overdue ? "unknown_overdue" : "unknown_pending";
+}

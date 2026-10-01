@@ -101,11 +101,10 @@ context.
   event limits; confirm both still fit before launch, module 6.5. Added
   2026-09-20.
 
-- [ ] **CPUC Q2 2026 in the database.** scrape-cpuc has failed every week
-  since 2026-08-24 on a renamed zip folder and a renamed Nuro sheet, so the
-  homepage CPUC series stops at Q1 2026. Needs the parser fix proposed as
-  `fix(2.2)`, then one green run that writes Waymo deployment, Zoox and Nuro
-  pilot Q2 rows. Added 2026-09-30.
+- [x] **CPUC Q2 2026 in the database.** (Done 2026-10-01 by fix(2.2): Waymo
+  deployment and Zoox pilot Q2 rows written; Nuro has no driverless template
+  data to ingest. Rows came from a local run; confirm the first scheduled
+  scrape-cpuc run after the push is green.) Added 2026-09-30.
 - [ ] **Waymo roster re-check against waymo.com.** Six rows were stale after
   one idle month (San Antonio for five). Repeat within a week of launch, or
   rely on 5.4's roster scraper if it has shipped. Added 2026-09-30.

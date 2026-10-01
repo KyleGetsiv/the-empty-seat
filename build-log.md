@@ -452,3 +452,62 @@ the check was run and why it was shaped that way.
   (earnings-card, earnings-posture, earnings-search) and the `og` API route,
   which the quick map had never listed, plus `scrapers/__fixtures__/` and the
   empty `lib/utils/`.
+
+---
+
+## fix(2.2): CPUC parser for renamed files; scraper-health honesty (2026-10-01)
+
+Found by Section 0: scrape-cpuc red every Monday from 2026-08-24, Q2 2026
+missing from `ride_estimates` for six weeks, and a health check that called
+it "Pending at CPUC" for 25 of those days.
+
+- The fixtures are the evidence. The owner downloaded every pattern-era
+  deployment zip (Q2 2025 to Q2 2026) and both 2026 pilot zips into
+  `.claude/tmp/cpuc/` (gitignored; the raw zips are 40 to 64 MB). Only file
+  NAMES were committed (`__fixtures__/cpuc-zip-listings.json`) plus two small
+  real CSVs. The month-level file was spelled differently in all five
+  deployment quarters (`AV_ Month_Level`, `AV_Month_Level`,
+  `AV_Month-Level_Part0`, `AV_Month_Part0`) under four folder names
+  (`Driverless Deployment`, `2025-11_Driverless-Deployment Public`,
+  `Driverless`). The 2.2 regex fit exactly one, Q1 2026, the quarter it was
+  written against. So the 2026-09-07 "deep verify" had never verified a 2025
+  quarter; those rows predate the rebuild.
+- Matching is now two tests, not one regex: a folder segment containing
+  "driverless", and a basename that, with spaces and hyphens folded to
+  underscores, contains `month_level` or `month_partN`. Each test is
+  written against every listing, so the next rename fails a fixture rather
+  than a Monday. Cross-checked outside the code: Q4 2025 and Q1 2026
+  recomputed from the real zips equal the stored rows exactly (288,348 and
+  300,456 per week).
+- Zoox's Q2 miss was the same bug in a different place: Zoox stopped filing
+  an xlsx and filed CSVs named `Month-Level.csv`, which matched neither the
+  CSV pattern nor the xlsx path, so the carrier read as "not in filing".
+- Nuro: the 3.4 code fell back to any month-level file when no driverless
+  one existed, which is how it ended up trying to read a "Month-Level" sheet
+  from Nuro's workbook. The workbook is not the template at all (per-VIN
+  quarterly totals for a Drivered permit: 65.66 miles, 27 passengers since
+  May). The fallback was removed rather than taught to read it: every
+  surface labels the pilot series driverless, and the fallback would have
+  filled it with safety-driver trips (Zoox files a Drivered folder too). A
+  miss now carries its reason into the run summary.
+- CPUC answers an unposted quarter with a 302 (HEAD on the Q3 2026 zip,
+  2026-10-01), not the 404 that both the scraper and the new health check
+  assumed. Followed, a redirect can land on an HTML page with status 200,
+  which would read as "posted" and fire INGEST FAILING for every
+  not-yet-due quarter. Hence `zipAvailability()`: `redirect: "manual"`
+  everywhere, served only on a non-HTML 200.
+- scraper-health asks CPUC rather than inferring from the DB because the
+  inference is exactly what hid the failure. A HEAD per missing quarter is
+  usually one request a day, at the scraper's 2-second spacing. Adding a
+  scrape-results table was the alternative; rejected for this fix, since it
+  would still only know what our own scraper believed.
+- The 2026-09-13 "0 quarters, everything overdue" message had no "last
+  ingest" clause, which is what an errored query returning null produces;
+  hence the error checks. The cause of the query failure itself is unknown.
+- Verified: 35 tests (14 new) pass in the cloud container on a Linux
+  install; the owner ran the suite locally before the last test
+  (`zipAvailability`) was added; one local scraper run inserted Q2 2026 for
+  Waymo (4,220,075 trips, 28,143,284.7 VMT) and Zoox (35,684 trips). The
+  first green scheduled Actions run is the next Monday after the push.
+- Accuracy pass (architecture.md Routes, admin table): every listed admin
+  route exists; no drift.
